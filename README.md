@@ -1,7 +1,5 @@
 # Cox Proportional Hazard Model App 
 
-MoveApps
-
 Github repository: *https://github.com/meredithspalmer/MoveApps_CoxPropHazard*
 
 ## Description

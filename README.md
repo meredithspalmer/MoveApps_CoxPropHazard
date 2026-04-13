@@ -3,10 +3,19 @@
 Github repository: *https://github.com/meredithspalmer/MoveApps_CoxPropHazard*
 
 ## Description
-*Enter here the short description of the App that might also be used when filling out the description during App submission to MoveApps. This text is directly presented to Users that look through the list of Apps when compiling Workflows.*
+
+Performs Cox proportional hazards models on survival data, to determine how covariates affect the time until a mortality event occurs
+
+These analyses can be performed across an entire dataset, within defined time periods, and/or across data subsets.
 
 ## Documentation
-*Enter here a detailed description of your App. What is it intended to be used for. Which steps of analyses are performed and how. Please be explicit about any detail that is important for use and understanding of the App and its outcomes. You might also refer to the sections below.*
+
+This app implements fundamental Cox proportional hazard (CPH) survival estimation functions. It produces life tables, survival curves, cumulative hazard plots, and, if applicable, statistical comparisons of per-group survival estimation for different attributes (sex, survival year, life stage, attachment type, or model).
+
+*Cox proportional hazard models*: The CPH estimator is a non-parametric method used to estimate the survival function, that is, the probability that an individual survives past time t, from lifetime data. This analysis allows for:
+
+Right-censoring, where the exact time of death is unknown for some individuals because they are still alive at the end of the study period, lost to follow-up (e.g., collar failure), or exit the study period alive for other reasons.
+Staggered entry (also called left truncation or delayed entry), where individuals enter the study at different times rather than all starting at the same baseline.
 
 ### Application scope
 #### Generality of App usability

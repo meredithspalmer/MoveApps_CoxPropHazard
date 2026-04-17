@@ -2,76 +2,283 @@
   "version": "1.2",
   "settings": [
     {
-      "id": "sdk",
-      "name": "The name of the MoveApps SDK",
-      "description": "Showcase requesting a string input from the users of your app.",
-      "defaultValue": "MoveApps SDK",
+      "id": "time_period_start",
+      "name": "Start date",
+      "description": "Select the start date for your project. If left empty, the start date will be the first deploy_on_timestamp date.",
+      "defaultValue": null,
+      "type": "INSTANT"
+    },
+    {
+      "id": "time_period_end",
+      "name": "End date",
+      "description": "Select the end date for your project. If left empty, the end date will be the last deploy_off_timestamp date.",
+      "defaultValue": null,
+      "type": "INSTANT"
+    },
+    {
+      "id": "fix_na_start_times",
+      "name": "Fix empty start times",
+      "description": "Define how to deal with NA start dates (deploy_on_timestamp).", 
+      "defaultValue": "timestamp",
+      "type": "RADIOBUTTONS",
+      "options":[
+        {
+          "value": "timestamp", 
+          "displayText": "Replace NA deploy_on_timestamp with time_period_start"
+        }, 
+        {
+          "value": "remove",
+          "displayText": "Remove tracks with NA deploy_on_timestamp" 
+        }
+      ]
+    }, 
+    {
+      "id": "fix_na_end_times",
+      "name": "Fix empty end times",
+      "description": "Define how to deal with NA end dates (deploy_off_timestamp).", 
+      "defaultValue": "timestamp",
+      "type": "RADIOBUTTONS",
+      "options":[
+        {
+          "value": "timestamp", 
+          "displayText": "Replace NA deploy_off_timestamp with time_period_end"
+        }, 
+        {
+          "value": "systime",
+          "displayText": "Replace NA deploy_off_timestamp with current date" 
+        }, 
+        {
+          "value": "remove",
+          "displayText": "Remove tracks with NA deploy_off_timestamp" 
+        }
+      ]
+    }, 
+    {
+      "id": "censor_capture_mortality",
+      "name": "Censor capture-related mortality",
+      "description": "If necessary, input number of days post-capture to exclude from analysis.",
+      "defaultValue": 0,
+      "type": "INTEGER"
+    }, 
+    {
+      "id": "subset_condition_1",
+      "name": "Perform analysis on subset of data",
+      "description": "If interested in performing analyses on a subset of the data, select the variable to subset by below. You will define the group of interest within this subset in the next step. Note: if using a survival year or life stage filter, be sure to enter survival year start dates in the following filters. For life stage, your data will neect to contain the column `animal_birth_hatch_year` and you will additionally need to add auxiliary life stage information (template csv files can be found on this app's GitHub page).",
+      "defaultValue": null,
+      "type": "DROPDOWN",
+      "options": [
+        {
+          "value": null,
+          "displayText": "All data included"
+        },
+        {
+          "value": "sex",
+          "displayText": "Subset by sex (m/f/u)"
+        }, 
+        {
+          "value": "lifestage",
+          "displayText": "Subset by lifestage (user-defined)"
+        }, 
+        {
+          "value": "survival_year",
+          "displayText": "Subset by survival year (user-defined)"
+        },
+        {
+          "value": "attachment_type",
+          "displayText": "Subset by attachment type"
+        },
+        {
+          "value": "model",
+          "displayText": "Subset by tag model"
+        }
+      ]
+    }, 
+    {
+      "id": "subset_condition_define_1",
+      "name": "Define your subsetting condition",
+      "description": "Enter the factor of the above category you would like the subset your data on (e.g., `m` if `sex` is selected above, to include only male individuals). For 'survival year', enter the desired year (e.g., 2015, 2024). For other parameters, you will need the exact spelling,  capitalization, and/or formatting as your desired subset variable.",
+      "defaultValue": null,
       "type": "STRING"
     },
     {
-      "id": "year",
-      "name": "The year",
-      "description": "Insert description for the year setting setting",
-      "defaultValue": 2022,
-      "type": "INTEGER"
+      "id": "subset_condition_2",
+      "name": "Perform analysis on a further subset of data",
+      "description": "If interested in performing analyses on a further subset of the data, select the variable to subset by below. You will define the group of interest within this subset in the next step. Note: if using a survival year or life stage filter, be sure to enter survival year start dates in the following filters. For life stage, your data will neect to contain the column `animal_birth_hatch_year` and you will additionally need to add auxiliary life stage information (template csv files can be found on this app's GitHub page).",
+      "defaultValue": null,
+      "type": "DROPDOWN",
+      "options": [
+        {
+          "value": null,
+          "displayText": "All remaining data included"
+        },
+        {
+          "value": "sex",
+          "displayText": "Subset by sex (m/f/u)"
+        }, 
+        {
+          "value": "lifestage",
+          "displayText": "Subset by lifestage (user-defined)"
+        }, 
+        {
+          "value": "survival_year",
+          "displayText": "Subset by survival year (user-defined)"
+        },
+        {
+          "value": "attachment_type",
+          "displayText": "Subset by attachment type (user-defined)"
+        },
+        {
+          "value": "model",
+          "displayText": "Subset by tag model (user-defined)"
+        }
+      ]
+    }, 
+    {
+      "id": "subset_condition_define_2",
+      "name": "Define your second subsetting condition",
+      "description": "Enter the factor of the above category you would like the subset your data on (e.g., `m` if `sex` is selected above, to include only male individuals). For 'survival year', enter the desired year (e.g., 2015, 2024). For other parameters, you will need the exact spelling,  capitalization, and/or formatting as your desired subset variable.",
+      "defaultValue": null,
+      "type": "STRING"
     },
     {
-      "id": "auxiliary-file-a",
-      "name": "Personalization",
-      "description": "You can personalize the app by providing a file",
-      "type": "USER_FILE"
-    }
+      "id": "group_comparison_individual",
+      "name": "Groups for comparison",
+      "description": "If interested in comparing across groups, identify the grouping variable. Note that `survival year` and `life stage` require entry of additional and/or auxiliary data.",
+      "defaultValue": null,
+      "type": "DROPDOWN",
+      "options": [
+        {
+          "value": null,
+          "displayText": "No comparison (all individuals)"
+        },
+        {
+          "value": "sex",
+          "displayText": "Sex"
+        },
+        {
+          "value": "lifestage",
+          "displayText": "Life stage"
+        },
+        {
+          "value": "attachment_type",
+          "displayText": "Attachment type"
+        }, 
+        {
+          "value": "model",
+          "displayText": "Model of tag"
+        }, 
+        {
+          "value": "survival_year",
+          "displayText": "Survival year (define below)"
+        }
+      ]
+    }, 
+    {
+      "id": "survival_yr_start",
+      "name": "Survival year start",
+      "description": "If comparing across survival years, select the start date of your survival year. Note that what is important is the day and month; year must be entered but is irrelevant.",
+      "defaultValue": null,
+      "type": "INSTANT"
+    },
+    {
+    "id": "animal_birth_hatch_year_table",
+    "name": "Animal birth/hatch year definitions",
+    "description": "For survival year analyses that include animal life stage, upload a spreadsheet containing the following information: animal_life_stage, year_at_start (that is, a file that maps age to lifestage; see template on GitHub). The app expects a file with the extension: `.csv`.",
+    "type": "USER_FILE"
+    },
+    {
+      "id": "life_table_days",
+      "name": "Generate periods for life table",
+      "description": "Define how often to calculate survival probabilities for the life table (e.g., every 30 days).",
+      "defaultValue": 30,
+      "type": "INTEGER"
+    }, 
+    {
+      "id": "calc_month_mort",
+      "name": "Plot monthly mortality",
+      "description": "Select an option.",
+      "defaultValue": false,
+      "type": "RADIOBUTTONS",
+      "options": [
+        {
+        "value": false,
+        "displayText": "Do not plot monthly mortality"
+        },
+        {
+          "value": true,
+          "displayText": "Plot monthly mortality"
+        }
+        ]
+      }
   ],
   "dependencies": {
     "R": [
-      {
-        "name": "lubridate"
-      },
-      {
-        "remotes": "install_git('https://gitlab.com/bartk/move2.git')"
-      }
+      {"name": "move2"},
+      {"name": "survival"},
+      {"name": "survminer"},
+      {"name": "ggplot2"},
+      {"name": "dplyr"},
+      {"name": "lubridate"},
+      {"name": "stringr"},
+      {"name": "sf"},
+      {"name": "tidyr"}, 
+      {"name": "purrr"}, 
+      {"name": "viridis"}, 
+      {"remotes": "install_git('https://github.com/tidyverse/forcats.git')"}
     ]
   },
-  "providedAppFiles": [
-    {
-      "settingId": "auxiliary-file-a",
-      "from": "data/auxiliary/user-files/provided-app-files/auxiliary-file-a/sample.txt"
-    }
-  ],
   "license": {
     "key": "MIT"
   },
   "language": "eng",
   "keywords": [
-    "example",
-    "template"
+    "cox propotional hazard model",
+    "survival analysis",
+    "mortality"
   ],
   "people": [
     {
-      "firstName": "Charles",
+      "firstName": "Meredith",
+      "middleInitials": "S.",
+      "lastName": "Palmer",
+      "email": "mspalmer.zool@gmail.com",
+      "roles": ["author", "creator", "contractor"],
+      "orcid": "0000-0002-1416-1732",
+      "affiliation": "Yale University", 
+      "affiliationRor": null
+    }, 
+    {
+      "firstName": "Jasmine",
       "middleInitials": null,
-      "lastName": "Darwin",
-      "email": "creator@example.com",
-      "roles": [
-        "author",
-        "creator"
-      ],
+      "lastName": "Ware",
+      "email": null,
+      "roles": ["contributor", "funder"],
       "orcid": null,
-      "affiliation": null,
+      "affiliation": "Yukon Government", 
+      "affiliationRor": null
+    }, 
+    {
+      "firstName": "Mike",
+      "middleInitials": null,
+      "lastName": "Suitor",
+      "email": null,
+      "roles": ["contributor", "funder"],
+      "orcid": null,
+      "affiliation": "Yukon Government", 
       "affiliationRor": null
     }
   ],
   "funding": [
     {
-      "name": "funder name",
-      "comment": "grant for App"
+      "name": "Yukon Government",
+      "comment": "Funding for app development."
     }
   ],
   "references": [
     {
       "type": "IsDescribedBy",
-      "note": "Darwin, C. 1900. The creation. Journal XY. 1-2",
-      "url": "https://anylink.xyz"
+      "note": "Cox, D. R. 1972. Regression models and life‐tables. Journal of the Royal Statistical Society: Series B (Methodological), 34(2), 187-202.",
+      "url": "https://www.jstor.org/stable/pdf/2985181.pdf"
     }
   ]
 }

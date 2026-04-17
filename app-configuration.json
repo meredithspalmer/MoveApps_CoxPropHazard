@@ -1,4 +1,16 @@
 {
-    "sdk": "MoveApps R SDK",
-    "year": 2014
+   "time_period_start"             : null,
+   "time_period_end"               : null, 
+   "censor_capture_mortality"      : 2, 
+   "fix_na_start_times"            : "timestamp", 
+   "fix_na_end_times"              : "timestamp",  
+   "subset_condition_1"            : "sex",
+   "subset_condition_define_1"     : "f", 
+   "subset_condition_2"            : null,
+   "subset_condition_define_2"     : null, 
+   "group_comparison_individual"   : "model",
+   "survival_yr_start"             : "2016-06-01T00:00:00Z",
+   "animal_birth_hatch_year_table" : null, 
+   "life_table_days"               : 30, 
+   "calc_month_mort"               : true
 }

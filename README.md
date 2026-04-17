@@ -107,19 +107,17 @@ Note that a larger sample size is required for models with multiple covariates.
 
 *Hazard ratio table:* Output of the Cox PH model; table (`cox_hazard_ratios.csv`) with covariates, hazard ratios, 95% confidence intervals, z-statistics, and p-values.
 
-**Proportional hazards test:** FROM HERE 
+**Proportional hazards test:** Table (`ph_assumption_test.csv`) with Schoenfeld residult test results per covariate and globally, testing whether the proportional hazards assumption holds. 
 
 *Mortality plot:* Optional diagnostic plot (`monthly_mortality.png`) depicting mortality rate per month across the study period. 
 
-*KM survival curve:* Plot (`km_survival_curve.png`), depicting survival over time with median survival time indicated. User can select whether plot includes risk and cumulative events tables. 
+*Cox PH survival curves:* Plot (`cox_survival_curve.png`), depicting covariate-adjusted survival over time with median survival time indicated. 
 
-*Cumulative hazard plot:* Plot (`cumulative_hazard_plot.png`), depicting total accumulated risk (expected number of accumulated deaths) over time. User can select whether plot includes risk and cumulative events tables. 
+*Comparison Cox curves:* Plot (`cox_comparison_curves.png`), depicting covariate-adjusted survival curves by selected group.
 
-*Log-rank test:* Output of comparing survival curves between groups; table (`logrank_table_statistics.csv`) with test statistics, degrees of freedom, p-value, and pairwise comparisons. 
+*Cumulative hazard plot:* Plot (`cumulative_hazard_plot.png`), depicting total accumulated risk over time derived from the baseline hazard. 
 
-*Comparison KM curves:* Plot (`km_comparison_curves.png`), depicting survival curves by selected group. User can select whether plot includes risk and cumulative events tables. 
-
-*Comparison hazard plots:* Plot (`cumulative_hazard_comparison_plot.png`), depicting cumulative hazard plots by selected group. User can select whether plot includes risk and cumulative events tables. 
+*Comparison hazard plots:* Plot (`cumulative_hazard_comparison_plot.png`), depicting cumulative hazard plots by selected group.
 
 
 ### Settings 
@@ -135,12 +133,15 @@ Note that a larger sample size is required for models with multiple covariates.
 
 `Perform analysis on subset of data` and `Define subset condition`: If user wants to perform analyses on a subset of the data, user can define the grouping parameter they want to split the data on (subset condition; e.g., "sex") and the group of interest they wish to retain in the study (subset definition; e.g., "f"). Default setting is to include all data. There are up to two subsets users can define. 
 
-`Groups for comparison`: If interested in comparing across groups, this identifies the grouping variable. Default is no group comparisons. Options currently include: 
+`Covariates for Cox model`: The user must specify one or more covariates to include in the Cox PH model. Covariate options currently include: 
 - Sex
 - Life stage 
 - Attachment type 
 - Model of tag 
 - Survival year (dates defined by user)
+At least one covariate is required to fit the Cox PH model; for global analyses, use the KM Survival app (https://github.com/meredithspalmer/MoveApps_KM_Survival). 
+
+`Reference group`: For each categorical covariate, the user may specify a reference group against which hazard ratios are calculated. If left null, the most common group will be used as the reference.
 
 `Survival year start date`: If comparing across survival years (see above), the user can define the day and month that each 'survival year' begins. The code assumes a year runs 365(6) days. Default is null. Unit: `date`. 
 

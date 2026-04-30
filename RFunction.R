@@ -1262,14 +1262,14 @@ rFunction = function(data,
   
   if (is.null(survival_yr_start)) {
     
-    warning("Calculating Cox Proportional Hazards using summary table...")
+    logger.info("Calculating Cox Proportional Hazards using summary table...")
     
     # Warning for no mortality events
     if (sum(summary_table$mortality_event) == 0) {
-      warning("There are no mortality events in the chosen subset of data.")
+      logger.fatal("There are no mortality events in the chosen subset of data.")
     }
     
-    ## Fit model --
+    ## Fit model --- 
     fitting_data <- summary_table
     
     # Collect non-NULL covariates
@@ -1284,7 +1284,7 @@ rFunction = function(data,
       if (!is.null(ref) && ref %in% levels(factor(fitting_data[[cov]]))) {
         fitting_data[[cov]] <- relevel(factor(fitting_data[[cov]]), ref = ref)
       } else if (!is.null(ref)) {
-        warning(paste0("Reference level '", ref, "' not found in covariate '", cov, "' — using default."))
+        logger.info(paste0("Reference level '", ref, "' not found in covariate '", cov, "' — using default."))
       }
     }
     
@@ -1292,7 +1292,7 @@ rFunction = function(data,
     cox_formula <- as.formula(paste("Surv(entry_time_days, exit_time_days, mortality_event) ~",
                                     paste(covariates, collapse = " + ")))
     
-    # Fit standard Cox, fall back to Firth's if separation detected
+    # Fit standard Cox 
     firth_used         <- FALSE
     separation_detected <- FALSE
     
@@ -1306,35 +1306,29 @@ rFunction = function(data,
       }
     )
     
-    # Fall back to Firth's if separation warning was triggered
+    # Apply Firth's if separation warning was triggered
     if (separation_detected) {
       
-      message("Separation detected in coxph — falling back to Firth's penalized Cox model.")
+      logger.warn("Separation detected in coxph — falling back to Firth's penalized Cox model.")
       coxphf_fit <- coxphf(cox_formula, data = fitting_data,
                            maxstep = 0.1,   
                            maxit   = 200) 
       firth_used  <- TRUE
       
-      # Align all vectors by coefficient names before assembling the data frame.
-      # ci.lower/ci.upper and prob may use different internal ordering than
-      # coefficients, so explicit name-based indexing prevents silent row mismatch.
+      # For Firth's, align vectors by coefficient names 
       coef_names <- names(coxphf_fit$coefficients)
-      
-      cox.tab <- data.frame(
-        term      = coef_names,
-        estimate  = exp(coxphf_fit$coefficients[coef_names]),
-        conf.low  = exp(coxphf_fit$ci.lower[coef_names]),
-        conf.high = exp(coxphf_fit$ci.upper[coef_names]),
-        p.value   = coxphf_fit$prob[coef_names],
-        row.names = NULL
-      )
+      cox.tab <- data.frame(term      = coef_names,
+                            estimate  = exp(coxphf_fit$coefficients[coef_names]),
+                            conf.low  = exp(coxphf_fit$ci.lower[coef_names]),
+                            conf.high = exp(coxphf_fit$ci.upper[coef_names]),
+                            p.value   = coxphf_fit$prob[coef_names],
+                            row.names = NULL)
       
     } else {
-      # Standard Cox worked cleanly
       cox.tab <- tidy(coxph_fit, exponentiate = TRUE, conf.int = TRUE)
     }
     
-    # Add a flag column so it's clear in the output which model was used
+    # Flag which model used
     cox.tab$model <- ifelse(firth_used, "Firth's Penalized Cox", "Standard Cox")
     
     # Save
@@ -1350,18 +1344,18 @@ rFunction = function(data,
       surv.at.means <- survfit(coxph_fit, data = fitting_data)
     }
     
-    # Tidy and save
+    # Save
     surv.at.means.tab <- tidy(surv.at.means)
     write.csv(surv.at.means.tab, file = appArtifactPath("surv_at_means.csv"), row.names = FALSE)
   }
   
   if (!is.null(survival_yr_start)) {
     
-    warning("Calculating KM using survival table...")
+    logger.info("Calculating KM using survival table...")
     
     # Warning for no mortality events
     if (sum(yearly_survival$mortality_event) == 0) {
-      warning("There are no mortality events in the chosen subset of data.")
+      logger.fatal("There are no mortality events in the chosen subset of data.")
     }
     
     ## Fit model --
@@ -1380,7 +1374,7 @@ rFunction = function(data,
       if (!is.null(ref) && ref %in% levels(factor(fitting_data[[cov]]))) {
         fitting_data[[cov]] <- relevel(factor(fitting_data[[cov]]), ref = ref)
       } else if (!is.null(ref)) {
-        warning(paste0("Reference level '", ref, "' not found in covariate '", cov, "' — using default."))
+        logger.info(paste0("Reference level '", ref, "' not found in covariate '", cov, "' — using default."))
       }
     }
     
@@ -1388,7 +1382,7 @@ rFunction = function(data,
     cox_formula <- as.formula(paste("Surv(entry_time_days, exit_time_days, mortality_event) ~",
                                     paste(covariates, collapse = " + ")))
     
-    # Fit standard Cox, fall back to Firth's if separation detected
+    # Fit standard Cox 
     firth_used          <- FALSE
     separation_detected <- FALSE
     
@@ -1402,35 +1396,30 @@ rFunction = function(data,
       }
     )
     
-    # Fall back to Firth's if separation warning was triggered
+    # Apply Firth's if separation warning was triggered
     if (separation_detected) {
       
-      message("Separation detected in coxph — falling back to Firth's penalized Cox model.")
+      logger.warn("Separation detected in coxph — falling back to Firth's penalized Cox model.")
       coxphf_fit <- coxphf(cox_formula, data = fitting_data,
                            maxstep = 0.1,
                            maxit   = 200)
       firth_used <- TRUE
       
-      # Align all vectors by coefficient names before assembling the data frame.
-      # ci.lower/ci.upper and prob may use different internal ordering than
-      # coefficients, so explicit name-based indexing prevents silent row mismatch.
+      # For Firth's, align vectors by coefficient names 
       coef_names <- names(coxphf_fit$coefficients)
       
-      cox.tab <- data.frame(
-        term      = coef_names,
-        estimate  = exp(coxphf_fit$coefficients[coef_names]),
-        conf.low  = exp(coxphf_fit$ci.lower[coef_names]),
-        conf.high = exp(coxphf_fit$ci.upper[coef_names]),
-        p.value   = coxphf_fit$prob[coef_names],
-        row.names = NULL
-      )
+      cox.tab <- data.frame(term      = coef_names,
+                            estimate  = exp(coxphf_fit$coefficients[coef_names]),
+                            conf.low  = exp(coxphf_fit$ci.lower[coef_names]),
+                            conf.high = exp(coxphf_fit$ci.upper[coef_names]),
+                            p.value   = coxphf_fit$prob[coef_names],
+                            row.names = NULL)
       
     } else {
-      # Standard Cox worked cleanly
       cox.tab <- tidy(coxph_fit, exponentiate = TRUE, conf.int = TRUE)
     }
     
-    # Add a flag column so it's clear in the output which model was used
+    # Flag which model used
     cox.tab$model <- ifelse(firth_used, "Firth's Penalized Cox", "Standard Cox")
     
     # Save
@@ -1446,13 +1435,15 @@ rFunction = function(data,
       surv.at.means <- survfit(coxph_fit, data = fitting_data)
     }
     
-    # Tidy and save
+    # Save
     surv.at.means.tab <- tidy(surv.at.means)
     write.csv(surv.at.means.tab, file = appArtifactPath("surv_at_means.csv"), row.names = FALSE)
   }
   
   
-  ## Plot of predicted survival for subject at means of covariates --- 
+  ## Visualizations of results at covariate means -----------------------------
+  
+  # Plot of predicted survival --- 
   surv_plot <- ggsurvfit(surv.at.means) +
     add_confidence_interval() +
     add_risktable(risktable_stats = c("n.risk", "cum.event"),
@@ -1471,7 +1462,7 @@ rFunction = function(data,
           legend.position  = "none",
           panel.grid.major.y = element_line(color = "grey92"))
   
-  # Save plot  
+  # Save 
   png(appArtifactPath("surv_at_means_plot.png"), 
       width = 7, height = 6, 
       units = "in", res = 300)
@@ -1486,7 +1477,7 @@ rFunction = function(data,
     scale_x_continuous(breaks = pretty(range(surv.at.means.tab$time), n = 8)) +
     theme_classic(base_size = 12)
   
-  # Save plot  
+  # Save   
   png(appArtifactPath("cum_hazard_at_means_plot.png"), 
       width = 7, height = 6, 
       units = "in", res = 300)
@@ -1515,7 +1506,7 @@ rFunction = function(data,
     
   } else {
     # Firth's Cox: coxph_for_survfit is a coxph object frozen at Firth's coefficients
-    # PH test is approximate — coefficients are from Firth's model but SE/residuals from coxph
+    logger.info("PH test is approximate — coefficients are from Firth's model but SE/residuals from coxph")
     ph_test <- cox.zph(coxph_for_survfit)
     print(ph_test)
     
@@ -1551,16 +1542,14 @@ rFunction = function(data,
     geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), height = 0.2) +
     geom_vline(xintercept = 1, linetype = "dashed", color = "red") +
     scale_x_log10() +  # HRs are naturally log-scaled
-    labs(
-      title    = "Hazard Ratios with 95% Confidence Intervals",
-      subtitle = ifelse(firth_used, "Firth's Penalized Cox Model", "Standard Cox Model"),
-      x        = "Hazard Ratio (log scale)",
-      y        = NULL
-    ) +
+    labs(title    = "Hazard Ratios with 95% Confidence Intervals",
+         subtitle = ifelse(firth_used, "Firth's Penalized Cox Model", "Standard Cox Model"),
+         x        = "Hazard Ratio (log scale)",
+         y        = NULL) +
     theme_classic(base_size = 12) +
     theme(plot.title = element_text(face = "bold"))
   
-  # Save plot  
+  # Save   
   png(appArtifactPath("forest_plot.png"), 
       width = 7, height = 5,
       units = "in", res = 300)
@@ -1568,8 +1557,9 @@ rFunction = function(data,
   dev.off()
   
   
-  ## Stratified Survival Plots & Group Comparisons ----------------------------
+  ## Stratified Group Comparisons ---------------------------------------------
   
+  ## Prepare covariates --- 
   active_covariates <- list(
     list(var = cox_covariate_1, ref = cox_covariate_1_ref),
     list(var = cox_covariate_2, ref = cox_covariate_2_ref),
@@ -1580,11 +1570,9 @@ rFunction = function(data,
   fitting_data <- if (is.null(survival_yr_start)) summary_table else yearly_survival
   
   for (cov_item in active_covariates) {
-    
     cov <- cov_item$var
     ref <- cov_item$ref
-    
-    warning(paste("Producing group comparison outputs for:", cov))
+    logger.info(paste("Producing group comparison outputs for:", cov))
     
     # Apply reference level if specified
     if (!is.null(ref) && ref %in% unique(fitting_data[[cov]])) {
@@ -1599,8 +1587,7 @@ rFunction = function(data,
     km_formula <- as.formula(paste("Surv(entry_time_days, exit_time_days, mortality_event) ~", cov))
     
     
-    ## Cox model tests (LR, Wald, Score) ------------------------------------
-    
+    ## Cox model tests (LR, Wald, Score) --- 
     cox_strat_fit <- coxph(km_formula, data = fitting_data)
     cox_summary   <- summary(cox_strat_fit)
     
@@ -1615,21 +1602,19 @@ rFunction = function(data,
                     cox_summary$sctest["df"]),
       p_value   = round(c(cox_summary$logtest["pvalue"],
                           cox_summary$waldtest["pvalue"],
-                          cox_summary$sctest["pvalue"]), 4)
-    )
-    
-    write.csv(test_results,
-              file      = appArtifactPath(paste0("model_tests_", cov, ".csv")),
-              row.names = FALSE)
+                          cox_summary$sctest["pvalue"]), 4))
     
     # LR p-value for plot subtitles
     lr_p <- test_results$p_value[1]
     
+    # Save 
+    write.csv(test_results,
+              file      = appArtifactPath(paste0("model_tests_", cov, ".csv")),
+              row.names = FALSE)
+
     
-    ## Pairwise comparisons (if >2 groups) ----------------------------------
-    
+    ## Pairwise comparisons (if >2 groups) ---
     if (n_groups > 2) {
-      
       group_levels     <- levels(fitting_data[[cov]])
       pairs            <- combn(group_levels, 2, simplify = FALSE)
       
@@ -1648,6 +1633,7 @@ rFunction = function(data,
       pairwise_df$p_bonferroni <- round(p.adjust(pairwise_df$p_wald, method = "bonferroni"), 4)
       pairwise_df$significant  <- ifelse(pairwise_df$p_bonferroni < 0.05, "Yes", "No")
       
+      # Save 
       write.csv(pairwise_df,
                 file      = appArtifactPath(paste0("pairwise_", cov, ".csv")),
                 row.names = FALSE)
@@ -1657,18 +1643,17 @@ rFunction = function(data,
     }
     
     
-    ## HR table for this covariate ------------------------------------------
-    
+    ## HR table for specified covariate ---
     cox_strat_tab <- tidy(cox_strat_fit, exponentiate = TRUE, conf.int = TRUE) %>%
       mutate(covariate = cov)
     
+    # Save 
     write.csv(cox_strat_tab,
               file      = appArtifactPath(paste0("cox_hr_", cov, ".csv")),
               row.names = FALSE)
     
     
     ## KM survival curves stratified by covariate ---------------------------
-    
     km_fit <- survfit(km_formula, data = fitting_data)
     
     km_plot <- ggsurvfit(km_fit, linewidth = 0.9) +
@@ -1692,6 +1677,7 @@ rFunction = function(data,
             legend.position    = "top",
             panel.grid.major.y = element_line(color = "grey92"))
     
+    # Save 
     png(appArtifactPath(paste0("km_by_", cov, ".png")),
         width = 8, height = 7, 
         units = "in", res = 300)
@@ -1699,8 +1685,7 @@ rFunction = function(data,
     dev.off()
     
     
-    ## Per-group median survival summary table --------------------------------
-    
+    ## Per-group median survival summary table ---
     km_summary <- tidy(km_fit) %>%
       group_by(strata) %>%
       summarise(n_risk_start = first(n.risk),
@@ -1716,13 +1701,13 @@ rFunction = function(data,
                 .groups = "drop") %>%
       mutate(lr_p_value = lr_p, covariate = cov)
     
+    # Save
     write.csv(km_summary,
               file      = appArtifactPath(paste0("km_summary_", cov, ".csv")),
               row.names = FALSE)
     
     
-    ## Forest plot (per-group HRs) --------------------------------------------
-    
+    ## Forest plot (per-group HRs) ---
     forest_strat <- ggplot(cox_strat_tab, aes(x = estimate, y = term)) +
       geom_vline(xintercept = 1, linetype = "dashed", color = "grey50") +
       geom_errorbarh(aes(xmin = conf.low, xmax = conf.high),
@@ -1741,7 +1726,7 @@ rFunction = function(data,
             plot.subtitle   = element_text(size = 10, color = "grey40"),
             legend.position = "top")
     
-    # Save plot  
+    # Save   
     png(appArtifactPath(paste0("forest_", cov, ".png")), 
         width = 7, height = 4,
         units = "in", res = 300)
@@ -1750,7 +1735,6 @@ rFunction = function(data,
     
     
     ## Cumulative hazard by group -------------------------------------------
-    
     cumhaz_plot <- ggsurvfit(km_fit, type = "cumhaz", linewidth = 0.9) +
       scale_color_manual(values = pal) +
       scale_fill_manual(values  = pal) +
@@ -1767,6 +1751,7 @@ rFunction = function(data,
             plot.subtitle   = element_text(size = 10, color = "grey40"),
             legend.position = "top")
     
+    # Save
     png(appArtifactPath(paste0("cumhaz_by_", cov, ".png")),
         width = 7, height = 5, 
         units = "in", res = 300)
@@ -1775,8 +1760,7 @@ rFunction = function(data,
     
     
     ## Log cumulative hazard (log-log) plot: visual PH assumption check -----
-    
-    logger.info("Parallel lines = proportional hazards assumption holds")
+    logger.info("If parallel lines = proportional hazards assumption holds")
     
     km_tidy <- tidy(km_fit) %>%
       filter(estimate > 0, estimate < 1) %>%
@@ -1796,7 +1780,7 @@ rFunction = function(data,
             plot.subtitle   = element_text(size = 10, color = "grey40"),
             legend.position = "top")
     
-    # Save plot  
+    # Save   
     png(appArtifactPath(paste0("loglog_", cov, ".png")), 
         width = 7, height = 5,
         units = "in", res = 300)
@@ -1805,7 +1789,6 @@ rFunction = function(data,
     
     
     ## Annual survival rate bar chart (yearly mode only) --------------------
-    
     if (!is.null(survival_yr_start)) {
       
       annual_surv <- fitting_data %>%
@@ -1833,7 +1816,7 @@ rFunction = function(data,
                legend.position = "top",
                axis.text.x     = element_text(angle = 45, hjust = 1))
       
-      # Save plot  
+      # Save   
       png(appArtifactPath(paste0("annual_surv_by_", cov, ".png")), 
           width = 8, height = 5,
           units = "in", res = 300)

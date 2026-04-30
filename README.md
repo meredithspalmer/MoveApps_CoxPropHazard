@@ -75,7 +75,7 @@ When stratified group comparisons are enabled, the app additionally produces per
 
 ### Application scope
 
-#### Generality of App usability
+#### Generality of app usability
 
 This app has currently been tested on mammals and birds with N\_individuals > 50, N\_deaths > 1, and study duration >1 year, but should be applicable to any dataset containing mortality data of sufficient sample size (see below).
 

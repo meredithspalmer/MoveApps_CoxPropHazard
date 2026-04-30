@@ -1496,7 +1496,8 @@ rFunction = function(data,
     png(appArtifactPath("schoenfeld_residuals.png"), 
         width  = 8, 
         height = 3 * length(covariates), 
-        dpi    = 300)
+        units  = "in",
+        res    = 300)
     print(ph_plot)
     dev.off()
     
@@ -1525,7 +1526,8 @@ rFunction = function(data,
     png(appArtifactPath("schoenfeld_residuals.png"), 
         width  = 8, 
         height = 3 * length(covariates), 
-        dpi    = 300)
+        units  = "in",
+        res    = 300)
     print(ph_combined)
     dev.off()
   }

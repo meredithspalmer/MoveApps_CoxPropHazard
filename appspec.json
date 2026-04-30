@@ -63,7 +63,7 @@
     {
       "id": "subset_condition_1",
       "name": "Perform analysis on subset of data",
-      "description": "If interested in performing analyses on a subset of the data, select the variable to subset by below. You will define the group of interest within this subset in the next step. Note: if using a survival year or life stage filter, be sure to enter survival year start dates in the following filters. For life stage, your data will neect to contain the column `animal_birth_hatch_year` and you will additionally need to add auxiliary life stage information (template csv files can be found on this app's GitHub page).",
+      "description": "If interested in performing analyses on a subset of the data, select the variable to subset by below. You will define the group of interest within this subset in the next step. Note: if using a survival year or life stage filter, be sure to enter survival year start dates in the following filters. For life stage, your data will need to contain the column `animal_birth_hatch_year` and you will additionally need to add auxiliary life stage information (template csv files can be found on this app's GitHub page).",
       "defaultValue": null,
       "type": "DROPDOWN",
       "options": [
@@ -96,14 +96,14 @@
     {
       "id": "subset_condition_define_1",
       "name": "Define your subsetting condition",
-      "description": "Enter the factor of the above category you would like the subset your data on (e.g., `m` if `sex` is selected above, to include only male individuals). For 'survival year', enter the desired year (e.g., 2015, 2024). For other parameters, you will need the exact spelling,  capitalization, and/or formatting as your desired subset variable.",
+      "description": "Enter the factor of the above category you would like to subset your data on (e.g., `m` if `sex` is selected above, to include only male individuals). For 'survival year', enter the desired year (e.g., 2015, 2024). For other parameters, you will need the exact spelling, capitalization, and/or formatting as your desired subset variable.",
       "defaultValue": null,
       "type": "STRING"
     },
     {
       "id": "subset_condition_2",
       "name": "Perform analysis on a further subset of data",
-      "description": "If interested in performing analyses on a further subset of the data, select the variable to subset by below. You will define the group of interest within this subset in the next step. Note: if using a survival year or life stage filter, be sure to enter survival year start dates in the following filters. For life stage, your data will neect to contain the column `animal_birth_hatch_year` and you will additionally need to add auxiliary life stage information (template csv files can be found on this app's GitHub page).",
+      "description": "If interested in performing analyses on a further subset of the data, select the variable to subset by below. You will define the group of interest within this subset in the next step. Note: if using a survival year or life stage filter, be sure to enter survival year start dates in the following filters. For life stage, your data will need to contain the column `animal_birth_hatch_year` and you will additionally need to add auxiliary life stage information (template csv files can be found on this app's GitHub page).",
       "defaultValue": null,
       "type": "DROPDOWN",
       "options": [
@@ -136,7 +136,7 @@
     {
       "id": "subset_condition_define_2",
       "name": "Define your second subsetting condition",
-      "description": "Enter the factor of the above category you would like the subset your data on (e.g., `m` if `sex` is selected above, to include only male individuals). For 'survival year', enter the desired year (e.g., 2015, 2024). For other parameters, you will need the exact spelling,  capitalization, and/or formatting as your desired subset variable.",
+      "description": "Enter the factor of the above category you would like to subset your data on (e.g., `m` if `sex` is selected above, to include only male individuals). For 'survival year', enter the desired year (e.g., 2015, 2024). For other parameters, you will need the exact spelling, capitalization, and/or formatting as your desired subset variable.",
       "defaultValue": null,
       "type": "STRING"
     },
@@ -171,15 +171,15 @@
     }, 
     {
       "id": "cox_covariate_1_ref",
-      "name": "Reference level for CoxPH covariate=",
-      "description": "For categorical variables, if appropriate, enter the name of the reference level against which other categories of data will be defined (e.g., `m` if `sex` is selected above). For 'survival year', enter the desired year (e.g., 2015, 2024). For other parameters, you will need the exact spelling,  capitalization, and/or formatting as your desired subset variable.",
+      "name": "Reference level for CoxPH covariate 1",
+      "description": "For categorical variables, if appropriate, enter the name of the reference level against which other categories of data will be defined (e.g., `m` if `sex` is selected above). For 'survival year', enter the desired year (e.g., 2015, 2024). For other parameters, you will need the exact spelling, capitalization, and/or formatting as your desired reference variable.",
       "defaultValue": null,
       "type": "STRING"
     },
     {
       "id": "cox_covariate_2",
-      "name": "Covariate for CoxPH modelling",
-      "description": "Identify the covariate variable for grouping. Note that `survival year` and `life stage` require entry of additional and/or auxiliary data.",
+      "name": "Second covariate for CoxPH modelling",
+      "description": "Identify a second covariate variable for grouping. Note that `survival year` and `life stage` require entry of additional and/or auxiliary data.",
       "defaultValue": null,
       "type": "DROPDOWN",
       "options": [
@@ -211,15 +211,15 @@
     }, 
     {
       "id": "cox_covariate_2_ref",
-      "name": "Reference level for CoxPH covariate=",
-      "description": "For categorical variables, if appropriate, enter the name of the reference level against which other categories of data will be defined (e.g., `m` if `sex` is selected above). For 'survival year', enter the desired year (e.g., 2015, 2024). For other parameters, you will need the exact spelling,  capitalization, and/or formatting as your desired subset variable.",
+      "name": "Reference level for CoxPH covariate 2",
+      "description": "For categorical variables, if appropriate, enter the name of the reference level against which other categories of data will be defined (e.g., `m` if `sex` is selected above). For 'survival year', enter the desired year (e.g., 2015, 2024). For other parameters, you will need the exact spelling, capitalization, and/or formatting as your desired reference variable.",
       "defaultValue": null,
       "type": "STRING"
     },
     {
       "id": "cox_covariate_3",
-      "name": "Covariate for CoxPH modelling",
-      "description": "Identify the covariate variable for grouping. Note that `survival year` and `life stage` require entry of additional and/or auxiliary data.",
+       "name": "Third covariate for CoxPH modelling",
+      "description": "Identify a third covariate variable for grouping. Note that `survival year` and `life stage` require entry of additional and/or auxiliary data.",
       "defaultValue": null,
       "type": "DROPDOWN",
       "options": [
@@ -251,8 +251,8 @@
     }, 
     {
       "id": "cox_covariate_3_ref",
-      "name": "Reference level for CoxPH covariate=",
-      "description": "For categorical variables, if appropriate, enter the name of the reference level against which other categories of data will be defined (e.g., `m` if `sex` is selected above). For 'survival year', enter the desired year (e.g., 2015, 2024). For other parameters, you will need the exact spelling,  capitalization, and/or formatting as your desired subset variable.",
+      "name": "Reference level for CoxPH covariate 3",
+      "description": "For categorical variables, if appropriate, enter the name of the reference level against which other categories of data will be defined (e.g., `m` if `sex` is selected above). For 'survival year', enter the desired year (e.g., 2015, 2024). For other parameters, you will need the exact spelling, capitalization, and/or formatting as your desired reference variable.",
       "defaultValue": null,
       "type": "STRING"
     },
@@ -312,7 +312,8 @@
       {"name": "coxphf"}, 
       {"name": "ggsurvfit"}, 
       {"name": "scales"}, 
-      {"name": "patchwork"}
+      {"name": "patchwork"}, 
+      {"name": "broom"}
     ]
   },
   "license": {

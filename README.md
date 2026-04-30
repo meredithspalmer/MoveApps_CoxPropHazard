@@ -169,6 +169,8 @@ The following artefacts are produced **per grouping covariate** (where `<cov>` i
 - Model of tag
 - Survival year (dates defined by user)
 
+The default for Cox covariate 1 is "sex" and for Cox covariates 2-3 is null. 
+
 `Survival year start date`: If comparing across survival years (see above), the user can define the day and month that each 'survival year' begins. The code assumes a year runs 365(6) days. Default is null. Unit: `date`.
 
 `Animal birth/hatch year definitions`: Optional auxiliary file a user can upload if they are running analyses by survival year and wish to classify individual life stage within a specific year. This file maps animal age to user-defined life stages. A template can be found here: https://github.com/meredithspalmer/MoveApps_Survival/blob/master/animal_birth_hatch_year_table.csv. App expects files in `.csv` format.

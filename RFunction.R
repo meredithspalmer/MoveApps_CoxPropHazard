@@ -11,6 +11,11 @@ library(tidyr)
 library(purrr) 
 library(viridis)
 library(ggpubr)
+library(coxphf)
+library(broom)
+library(ggsurvfit)
+library(scales)
+library(patchwork)
 
 # logger.fatal(), logger.error(), logger.warn(), logger.info(), logger.debug(), logger.trace()
 
@@ -25,7 +30,12 @@ rFunction = function(data,
                      subset_condition_define_1, 
                      subset_condition_2,
                      subset_condition_define_2, 
-                     group_comparison_individual,
+                     cox_covariate_1,
+                     cox_covariate_2, 
+                     cox_covariate_3, 
+                     cox_covariate_1_ref, 
+                     cox_covariate_2_ref, 
+                     cox_covariate_3_ref, 
                      survival_yr_start,
                      animal_birth_hatch_year_table, 
                      life_table_days, 
@@ -416,14 +426,14 @@ rFunction = function(data,
         !is.na(mortality_type) ~ 1L,
       TRUE ~ mortality_event)) %>%
     
-    # C. "mortality_location_filled" is filled 
+    # D. "mortality_location_filled" is filled 
     mutate(mortality_event = case_when(
       "mortality_location_filled" %in% names(.) &
         mortality_location_filled >= 1 ~ 1L,
       mortality_event == 1L ~ 1L,
       TRUE ~ mortality_event)) %>%
     
-    # D. "deployment_end_type" indicates censoring vs. death 
+    # E. "deployment_end_type" indicates censoring vs. death 
     mutate(mortality_event = case_when(
       mortality_event == 1L ~ 1L,
       
@@ -678,431 +688,272 @@ rFunction = function(data,
   
   ## Subset based on condition (if selected) ----------------------------------
   
+  # Lookup: condition name -> list(col, label, coerce_fn, summary_ok, yearly_ok)
+  subset_spec <- list(
+    sex = list(col = "sex", label = "sex", coerce = identity, summary_ok = TRUE,  yearly_ok = TRUE),
+    attachment_type = list(col = "attachment_type", label = "attachment type", coerce = identity, summary_ok = TRUE,  yearly_ok = TRUE),
+    model = list(col = "model", label = "model", coerce = as.integer, summary_ok = TRUE, yearly_ok = TRUE),
+    lifestage = list(col = "animal_life_stage_new", label = "life stage", coerce = identity, summary_ok = FALSE, yearly_ok = TRUE),
+    survival_year = list(col = "survival_year", label = "survival year", coerce = as.integer, summary_ok = FALSE, yearly_ok = TRUE)
+  )
+  
+  # Helper function 
+  apply_subset <- function(condition, define, summary_table, yearly_survival, survival_yr_start) {
+    if (is.null(condition)) return(list(summary_table = summary_table, yearly_survival = yearly_survival))
+    
+    spec <- subset_spec[[condition]]
+    if (is.null(spec)) stop(paste("Unknown subset condition:", condition))
+    
+    warning(paste0("Subsetting by ", spec$label, " (", define, ")"))
+    value <- spec$coerce(define)
+    
+    if (is.null(survival_yr_start)) {
+      if (!spec$summary_ok) {
+        warning("This subset only makes sense when data are processed by survival year. Please enter survival year start date.")
+      } else {
+        summary_table <- summary_table %>% filter(.data[[spec$col]] == value)
+      }
+    } else {
+      if (!spec$yearly_ok) {
+        warning("This subset only makes sense when data are processed by survival year. Please enter survival year start date.")
+      } else {
+        yearly_survival <- yearly_survival %>% filter(.data[[spec$col]] == value)
+      }
+    }
+    
+    list(summary_table = summary_table, yearly_survival = yearly_survival)
+  }
+  
   # SUBSET CONDITION 1 ---
+  result <- apply_subset(subset_condition_1, subset_condition_define_1, summary_table,
+                         yearly_survival, survival_yr_start)
+  summary_table    <- result$summary_table
+  yearly_survival  <- result$yearly_survival
   
-  if (!is.null(subset_condition_1) && subset_condition_1 == "sex") {
-    logger.info(paste0("Subsetting by sex (", subset_condition_define_1, ")"))
-    
-    if (is.null(survival_yr_start)) {
-      summary_table <- summary_table %>% filter(sex == subset_condition_define_1)
-    } else {
-      yearly_survival <- yearly_survival %>% filter(sex == subset_condition_define_1)
-    }
-  }
-  
-  
-  if (!is.null(subset_condition_1) && subset_condition_1 == "attachment_type") {
-    logger.info(paste0("Subsetting by attachment type (", subset_condition_define_1, ")"))
-    
-    if (is.null(survival_yr_start)) {
-      summary_table <- summary_table %>% filter(attachment_type == subset_condition_define_1)
-    } else {
-      yearly_survival <- yearly_survival %>% filter(attachment_type == subset_condition_define_1)
-    }
-  }
-  
-  if (!is.null(subset_condition_1) && subset_condition_1 == "model") {
-    logger.info(paste0("Subsetting by model (", subset_condition_define_1, ")"))
-    
-    if (is.null(survival_yr_start)) {
-      summary_table <- summary_table %>% filter(model == subset_condition_define_1) 
-    } else {
-      yearly_survival <- yearly_survival %>% filter(model == as.integer(subset_condition_define_1))
-    }
-  }
-  
-  if (!is.null(subset_condition_1) && subset_condition_1 == "lifestage") {
-    logger.info(paste0("Subsetting by life stage (", subset_condition_define_1, ")"))
-    
-    if (is.null(survival_yr_start)) {
-      logger.warn("This subset only makes sense when data are processed by survival year. Please enter survival year start date.")
-      
-    } else {
-      yearly_survival <- yearly_survival %>% filter(animal_life_stage_new == subset_condition_define_1)
-    }
-  }
-  
-  if (!is.null(subset_condition_1) && subset_condition_1 == "survival_year") {
-    logger.info(paste0("Subsetting by survival year (", subset_condition_define_1, ")"))
-    
-    if (is.null(survival_yr_start)) {
-      logger.warn("This subset only makes sense when data are processed by survival year. Please enter survival year start date.")
-      
-    } else {
-      yearly_survival <- yearly_survival %>% filter(survival_year == as.integer(subset_condition_define_1))
-    }
-  }
-  
-  if(!is.null(subset_condition_1)){
-    if(is.null(survival_yr_start) && nrow(summary_table) == 0){
+  if (!is.null(subset_condition_1)) {
+    if (is.null(survival_yr_start) && nrow(summary_table) == 0) {
       logger.fatal("There are no individuals meeting the first subsetting condition.")
-    } else if(!is.null(survival_yr_start) && nrow(yearly_survival) == 0){
+    } else if (!is.null(survival_yr_start) && nrow(yearly_survival) == 0) {
       logger.fatal("There are no individuals meeting the first subsetting condition.")
     }
   }
-  
   
   # SUBSET CONDITION 2 ---
+  result <- apply_subset(subset_condition_2, subset_condition_define_2, summary_table,
+                         yearly_survival, survival_yr_start)
+  summary_table   <- result$summary_table
+  yearly_survival <- result$yearly_survival
   
-  if (!is.null(subset_condition_2) && subset_condition_2 == "sex") {
-    logger.info(paste0("Subsetting by sex (", subset_condition_define_2, ")"))
-    
-    if (is.null(survival_yr_start)) {
-      summary_table <- summary_table %>% filter(sex == subset_condition_define_2)
-    } else {
-      yearly_survival <- yearly_survival %>% filter(sex == subset_condition_define_2)
-    }
-  } 
-  
-  if (!is.null(subset_condition_2) && subset_condition_2 == "attachment_type") {
-    logger.info(paste0("Subsetting by attachment type (", subset_condition_define_2, ")"))
-    
-    if (is.null(survival_yr_start)) {
-      summary_table <- summary_table %>% filter(attachment_type == subset_condition_define_2)
-    } else {
-      yearly_survival <- yearly_survival %>% filter(attachment_type == subset_condition_define_2)
-    }
-  }
-  
-  if (!is.null(subset_condition_2) && subset_condition_2 == "model") {
-    logger.info(paste0("Subsetting by model (", subset_condition_define_2, ")"))
-    
-    if (is.null(survival_yr_start)) {
-      summary_table <- summary_table %>% filter(model == subset_condition_define_2) 
-    } else {
-      yearly_survival <- yearly_survival %>% filter(model == subset_condition_define_2)
-    }
-  }
-  
-  if (!is.null(subset_condition_2) && subset_condition_2 == "lifestage") {
-    logger.info(paste0("Subsetting by life stage (", subset_condition_define_2, ")"))
-    
-    if (is.null(survival_yr_start)) {
-      logger.warn("This subset only makes sense when data are processed by survival year. Please enter survival year start date.")
-      
-    } else {
-      yearly_survival <- yearly_survival %>% filter(animal_life_stage_new == subset_condition_define_2)
-    }
-  }
-  
-  if (!is.null(subset_condition_2) && subset_condition_2 == "survival_year") {
-    logger.info(paste0("Subsetting by survival year (", subset_condition_define_2, ")"))
-    
-    if (is.null(survival_yr_start)) {
-      logger.warn("This subset only makes sense when data are processed by survival year. Please enter survival year start date.")
-      
-    } else {
-      yearly_survival <- yearly_survival %>% filter(survival_year == as.integer(subset_condition_define_2))
-    }
-  }
-  
-  if(!is.null(subset_condition_2)){
-    if(is.null(survival_yr_start) && nrow(summary_table) == 0){
+  if (!is.null(subset_condition_2)) {
+    if (is.null(survival_yr_start) && nrow(summary_table) == 0) {
       logger.fatal("There are no individuals meeting both subsetting conditions.")
-    } else if(!is.null(survival_yr_start) && nrow(yearly_survival) == 0){
+    } else if (!is.null(survival_yr_start) && nrow(yearly_survival) == 0) {
       logger.fatal("There are no individuals meeting both subsetting conditions.")
     }
   }
   
   
-  ## Clean user-defined grouping attributes (if selected) ---------------------
+  ## Clean Cox covariates -----------------------------------------------------
   
-  if(!is.null(group_comparison_individual) && group_comparison_individual == "sex"){
-    logger.info("Grouping by sex...")
+  # Note: This sets cox_covariate_X to NULL if no cleaned values are available 
+  
+  # Comparison covariate 1 --- 
+  if(!is.null(cox_covariate_1)) {
+    warning(paste("Comparing across", cox_covariate_1, "..."))
     
     if(is.null(survival_yr_start)){
-      logger.info("... with summary table")
+      warning("... with summary table")
       
-      # Ensure different conditions are present
-      non_na_unique <- unique(na.omit(summary_table$sex))
+      non_na_unique <- unique(na.omit(summary_table[[cox_covariate_1]]))
+      
       if (length(non_na_unique) <= 1) {
         if (length(non_na_unique) == 0) {
-          logger.warn("Warning: The grouping variable is entirely NA; no comparison is possible.")
+          warning(paste0("Warning: The grouping variable, ", cox_covariate_1, ", is entirely NA; no comparison is possible."))
         } else {
-          logger.warn("Warning: There is only one non-NA grouping variable; no comparison is possible.")
+          warning(paste0("Warning: There is only one non-NA comparison covariate in ", cox_covariate_1, "; no comparison is possible."))
         }
+        cox_covariate_1 <- NULL
       }
       
-      # Remove NAs 
-      n_original <- nrow(summary_table)
-      summary_table <- summary_table[!is.na(summary_table$sex),] 
-      
-      # Get unique sexes after cleaning
-      unique_sexes <- sort(unique(summary_table$sex))
-      n_sexes <- length(unique_sexes)
-      
-      logger.info(sprintf("%d sexes detected after cleaning: %s", n_sexes, paste(unique_sexes, collapse = ", ")),
-                  call. = FALSE, immediate. = TRUE)
-      
-      n_lost <- n_original - nrow(summary_table)
-      if (n_lost > 0) {
-        logger.warn(sprintf("%d individuals with NA sex removed from study.", n_lost),
-                    call. = FALSE, immediate. = TRUE)
+      if (!is.null(cox_covariate_1)) {
+        n_original    <- nrow(summary_table)
+        summary_table <- summary_table[!is.na(summary_table[[cox_covariate_1]]) & 
+                                         trimws(summary_table[[cox_covariate_1]]) != "", ]
+        
+        unique_values <- sort(unique(summary_table[[cox_covariate_1]]))
+        n_values      <- length(unique_values)
+        
+        warning(sprintf("%d values of comparison covariate detected after cleaning: %s", n_values, paste(unique_values, collapse = ", ")))
+        
+        n_lost <- n_original - nrow(summary_table)
+        if (n_lost > 0) {
+          warning(sprintf("%d individuals with NA covariate value removed from study.", n_lost))
+        }
       }
       
     } else {
-      logger.info("... with yearly survival")
+      warning("... with yearly survival")
       
-      # Ensure different conditions are present
-      non_na_unique <- unique(na.omit(yearly_survival$sex))
+      non_na_unique <- unique(na.omit(yearly_survival[[cox_covariate_1]]))
+      
       if (length(non_na_unique) <= 1) {
         if (length(non_na_unique) == 0) {
-          logger.warn("Warning: The grouping variable is entirely NA; no comparison is possible.")
+          warning(paste0("Warning: The grouping variable, ", cox_covariate_1, ", is entirely NA; no comparison is possible."))
         } else {
-          logger.warn("Warning: There is only one non-NA grouping variable; no comparison is possible.")
+          warning(paste0("Warning: There is only one non-NA comparison covariate in ", cox_covariate_1, "; no comparison is possible."))
         }
+        cox_covariate_1 <- NULL
       }
       
-      # remove NAs 
-      n_original      <- nrow(yearly_survival)
-      yearly_survival <- yearly_survival[!is.na(yearly_survival$sex),] 
-      
-      # Get unique sexes after cleaning
-      unique_sexes <- sort(unique(yearly_survival$sex))
-      n_sexes      <- length(unique_sexes)
-      
-      logger.info(sprintf("%d sexes detected after cleaning: %s", n_sexes, paste(unique_sexes, collapse = ", ")),
-                  call. = FALSE, immediate. = TRUE)
-      
-      n_lost <- n_original - nrow(yearly_survival)
-      if (n_lost > 0) {
-        logger.info(sprintf("%d individuals with NA sex removed from study.", n_lost),
-                    call. = FALSE, immediate. = TRUE)
+      if (!is.null(cox_covariate_1)) {
+        n_original      <- nrow(yearly_survival)
+        yearly_survival <- yearly_survival[!is.na(yearly_survival[[cox_covariate_1]]) & 
+                                             trimws(yearly_survival[[cox_covariate_1]]) != "", ]
+        
+        unique_values <- sort(unique(yearly_survival[[cox_covariate_1]]))
+        n_values      <- length(unique_values)
+        
+        warning(sprintf("%d values of comparison covariate detected after cleaning: %s", n_values, paste(unique_values, collapse = ", ")))
+        
+        n_lost <- n_original - nrow(yearly_survival)
+        if (n_lost > 0) {
+          warning(sprintf("%d individuals with NA covariate value removed from study.", n_lost))
+        }
       }
     }
   }
   
-  if(!is.null(group_comparison_individual) && group_comparison_individual == "lifestage"){
-    logger.info("Grouping by life stage...")
+  # Comparison covariate 2 --- 
+  if(!is.null(cox_covariate_2)) {
+    warning(paste("Comparing across", cox_covariate_2, "..."))
     
-    if(is.null(survival_yr_start)){ 
-      logger.error("This comparison only makes sense if survival years are defined.")
+    if(is.null(survival_yr_start)){
+      warning("... with summary table")
       
-    } else {
-      logger.info("... with yearly survival")
+      non_na_unique <- unique(na.omit(summary_table[[cox_covariate_2]]))
       
-      # Ensure different conditions are present
-      non_na_unique <- unique(na.omit(yearly_survival$animal_life_stage_new))
       if (length(non_na_unique) <= 1) {
         if (length(non_na_unique) == 0) {
-          logger.warn("Warning: The grouping variable is entirely NA; no comparison is possible.")
+          warning(paste0("Warning: The grouping variable, ", cox_covariate_2, ", is entirely NA; no comparison is possible."))
         } else {
-          logger.warn("Warning: There is only one non-NA grouping variable; no comparison is possible.")
+          warning(paste0("Warning: There is only one non-NA comparison covariate in ", cox_covariate_2, "; no comparison is possible."))
+        }
+        cox_covariate_2 <- NULL
+      }
+      
+      if (!is.null(cox_covariate_2)) {
+        n_original    <- nrow(summary_table)
+        summary_table <- summary_table[!is.na(summary_table[[cox_covariate_2]]) & 
+                                         trimws(summary_table[[cox_covariate_2]]) != "", ]
+        
+        unique_values <- sort(unique(summary_table[[cox_covariate_2]]))
+        n_values      <- length(unique_values)
+        
+        warning(sprintf("%d values of comparison covariate detected after cleaning: %s", n_values, paste(unique_values, collapse = ", ")))
+        
+        n_lost <- n_original - nrow(summary_table)
+        if (n_lost > 0) {
+          warning(sprintf("%d individuals with NA covariate value removed from study.", n_lost))
         }
       }
       
-      # Remove NAs 
-      n_original      <- nrow(yearly_survival)
-      yearly_survival <- yearly_survival[!is.na(yearly_survival$animal_life_stage_new),] 
+    } else {
+      warning("... with yearly survival")
       
-      # Get unique life-stages after cleaning
-      unique_stages  <- sort(unique(yearly_survival$animal_life_stage_new))
-      n_life_stages  <- length(unique_stages)
+      non_na_unique <- unique(na.omit(yearly_survival[[cox_covariate_2]]))
       
-      logger.info(sprintf("%d life-stages detected after cleaning: %s", n_life_stages, 
-                          paste(unique_stages, collapse = ", ")),
-                  call. = FALSE, immediate. = TRUE)
+      if (length(non_na_unique) <= 1) {
+        if (length(non_na_unique) == 0) {
+          warning(paste0("Warning: The grouping variable, ", cox_covariate_2, ", is entirely NA; no comparison is possible."))
+        } else {
+          warning(paste0("Warning: There is only one non-NA comparison covariate in ", cox_covariate_2, "; no comparison is possible."))
+        }
+        cox_covariate_2 <- NULL
+      }
       
-      n_lost <- n_original - nrow(yearly_survival)
-      if (n_lost > 0) {
-        logger.info(sprintf("%d individuals with NA life-stage removed from study.", n_lost),
-                    call. = FALSE, immediate. = TRUE)
+      if (!is.null(cox_covariate_2)) {
+        n_original      <- nrow(yearly_survival)
+        yearly_survival <- yearly_survival[!is.na(yearly_survival[[cox_covariate_2]]) & 
+                                             trimws(yearly_survival[[cox_covariate_2]]) != "", ]
+        
+        unique_values <- sort(unique(yearly_survival[[cox_covariate_2]]))
+        n_values      <- length(unique_values)
+        
+        warning(sprintf("%d values of comparison covariate detected after cleaning: %s", n_values, paste(unique_values, collapse = ", ")))
+        
+        n_lost <- n_original - nrow(yearly_survival)
+        if (n_lost > 0) {
+          warning(sprintf("%d individuals with NA covariate value removed from study.", n_lost))
+        }
       }
     }
   }
   
-  if(!is.null(group_comparison_individual) && group_comparison_individual == "model"){
-    logger.info("Group by model...")    
+  # Comparison covariate 3 ---  
+  if(!is.null(cox_covariate_3)) {
+    warning(paste("Comparing across", cox_covariate_3, "..."))
     
     if(is.null(survival_yr_start)){
-      logger.info("... with summary table")
+      warning("... with summary table")
       
-      # Ensure different conditions are present
-      non_na_unique <- unique(na.omit(summary_table$model))
+      non_na_unique <- unique(na.omit(summary_table[[cox_covariate_3]]))
+      
       if (length(non_na_unique) <= 1) {
         if (length(non_na_unique) == 0) {
-          logger.warn("Warning: The grouping variable is entirely NA; no comparison is possible.")
+          warning(paste0("Warning: The grouping variable, ", cox_covariate_3, ", is entirely NA; no comparison is possible."))
         } else {
-          logger.warn("Warning: There is only one non-NA grouping variable; no comparison is possible.")
+          warning(paste0("Warning: There is only one non-NA comparison covariate in ", cox_covariate_3, "; no comparison is possible."))
         }
+        cox_covariate_3 <- NULL
       }
       
-      # Clean data, remove NAs 
-      n_original <- nrow(summary_table)
-      summary_table <- summary_table %>%
-        filter(!is.na(model)) %>%
-        mutate(model = str_trim(model),
-               model = str_replace_all(model, "\\s+", ""),
-               model = str_extract(model, "^[^|]+"),
-               model = str_replace(model, "–", "-"))
-      
-      # Get unique conditions after cleaning
-      unique_conditions <- sort(unique(summary_table$model))
-      n_conditions <- length(unique_conditions)
-      
-      logger.info(
-        sprintf("%d models detected after cleaning: %s", n_conditions, paste(unique_conditions, collapse = ", ")),
-        call. = FALSE, immediate. = TRUE)
-      
-      n_lost <- n_original - nrow(summary_table)
-      if (n_lost > 0) {
-        logger.info(sprintf("%d individuals with NA model removed from study.", n_lost),
-                    call. = FALSE, immediate. = TRUE)
+      if (!is.null(cox_covariate_3)) {
+        n_original    <- nrow(summary_table)
+        summary_table <- summary_table[!is.na(summary_table[[cox_covariate_3]]) & 
+                                         trimws(summary_table[[cox_covariate_3]]) != "", ]
+        
+        unique_values <- sort(unique(summary_table[[cox_covariate_3]]))
+        n_values      <- length(unique_values)
+        
+        warning(sprintf("%d values of comparison covariate detected after cleaning: %s", n_values, paste(unique_values, collapse = ", ")))
+        
+        n_lost <- n_original - nrow(summary_table)
+        if (n_lost > 0) {
+          warning(sprintf("%d individuals with NA covariate value removed from study.", n_lost))
+        }
       }
       
     } else {
-      logger.info("... with yearly survival")
+      warning("... with yearly survival")
       
-      # Ensure different conditions are present
-      non_na_unique <- unique(na.omit(yearly_survival$model))
+      non_na_unique <- unique(na.omit(yearly_survival[[cox_covariate_3]]))
+      
       if (length(non_na_unique) <= 1) {
         if (length(non_na_unique) == 0) {
-          logger.warn("Warning: The grouping variable is entirely NA; no comparison is possible.")
+          warning(paste0("Warning: The grouping variable, ", cox_covariate_3, ", is entirely NA; no comparison is possible."))
         } else {
-          logger.warn("Warning: There is only one non-NA grouping variable; no comparison is possible.")
+          warning(paste0("Warning: There is only one non-NA comparison covariate in ", cox_covariate_3, "; no comparison is possible."))
         }
+        cox_covariate_3 <- NULL
       }
       
-      # Clean data, remove NAs 
-      n_original      <- nrow(yearly_survival)
-      yearly_survival <- yearly_survival %>%
-        filter(!is.na(model)) %>%
-        mutate(model = str_trim(model),
-               model = str_replace_all(model, "\\s+", ""),
-               model = str_extract(model, "^[^|]+"),
-               model = str_replace(model, "–", "-"))
-      
-      # Get unique conditions after cleaning
-      unique_conditions <- sort(unique(yearly_survival$model))
-      n_conditions      <- length(unique_conditions)
-      
-      logger.info(sprintf("%d models detected after cleaning: %s", n_conditions, 
-                          paste(unique_conditions, collapse = ", ")),
-                  call. = FALSE, immediate. = TRUE)
-      
-      n_lost <- n_original - nrow(yearly_survival)
-      if (n_lost > 0) {
-        logger.info(sprintf("%d individuals with NA model removed from study.", n_lost),
-                    call. = FALSE, immediate. = TRUE)
-      }
-    } 
-  }
-  
-  if(!is.null(group_comparison_individual) && group_comparison_individual == "attachment_type"){
-    logger.info("Grouping by attachment...")
-    
-    if(is.null(survival_yr_start)){
-      logger.info("... with summary table")
-      
-      # Ensure different conditions are present
-      non_na_unique <- unique(na.omit(summary_table$attachment_type))
-      if (length(non_na_unique) <= 1) {
-        if (length(non_na_unique) == 0) {
-          logger.warn("Warning: The grouping variable is entirely NA; no comparison is possible.")
-        } else {
-          logger.warn("Warning: There is only one non-NA grouping variable; no comparison is possible.")
+      if (!is.null(cox_covariate_3)) {
+        n_original      <- nrow(yearly_survival)
+        yearly_survival <- yearly_survival[!is.na(yearly_survival[[cox_covariate_3]]) & 
+                                             trimws(yearly_survival[[cox_covariate_3]]) != "", ]
+        
+        unique_values <- sort(unique(yearly_survival[[cox_covariate_3]]))
+        n_values      <- length(unique_values)
+        
+        warning(sprintf("%d values of comparison covariate detected after cleaning: %s", n_values, paste(unique_values, collapse = ", ")))
+        
+        n_lost <- n_original - nrow(yearly_survival)
+        if (n_lost > 0) {
+          warning(sprintf("%d individuals with NA covariate value removed from study.", n_lost))
         }
-      }
-      
-      # Clean data, remove NAs 
-      n_original    <- nrow(summary_table)
-      summary_table <- summary_table %>%
-        filter(!is.na(attachment_type)) %>%
-        mutate(attachment_type = str_trim(attachment_type),
-               attachment_type = str_replace_all(attachment_type, "\\s+", ""),
-               attachment_type = str_extract(attachment_type, "^[^|]+"),
-               attachment_type = str_replace(attachment_type, "–", "-"))
-      
-      # Get unique conditions after cleaning
-      unique_conditions <- sort(unique(summary_table$attachment_type))
-      n_conditions <- length(unique_conditions)
-      
-      logger.info(sprintf("%d attachment types detected after cleaning: %s", n_conditions,
-                          paste(unique_conditions, collapse = ", ")),
-                  call. = FALSE, immediate. = TRUE)
-      
-      n_lost <- n_original - nrow(summary_table)
-      if (n_lost > 0) {
-        logger.info(sprintf("%d individuals with NA attachment types removed from study.", n_lost),
-                    call. = FALSE, immediate. = TRUE)
-      }
-      
-    } else {
-      logger.info("... with summary table")
-      
-      # Ensure different conditions are present
-      non_na_unique <- unique(na.omit(yearly_survival$attachment_type))
-      if (length(non_na_unique) <= 1) {
-        if (length(non_na_unique) == 0) {
-          logger.warn("Warning: The grouping variable is entirely NA; no comparison is possible.")
-        } else {
-          logger.warn("Warning: There is only one non-NA grouping variable; no comparison is possible.")
-        }
-      }
-      
-      # Clean data, remove NAs 
-      n_original      <- nrow(yearly_survival)
-      yearly_survival <- yearly_survival %>%
-        filter(!is.na(attachment_type)) %>%
-        mutate(attachment_type = str_trim(attachment_type),
-               attachment_type = str_replace_all(attachment_type, "\\s+", ""),
-               attachment_type = str_extract(attachment_type, "^[^|]+"),
-               attachment_type = str_replace(attachment_type, "–", "-"))
-      
-      # Get unique conditions after cleaning
-      unique_conditions <- sort(unique(yearly_survival$attachment_type))
-      n_conditions      <- length(unique_conditions)
-      
-      logger.info(sprintf("%d attachment types detected after cleaning: %s", n_conditions, 
-                          paste(unique_conditions, collapse = ", ")),
-                  call. = FALSE, immediate. = TRUE)
-      
-      n_lost <- n_original - nrow(yearly_survival)
-      if (n_lost > 0) {
-        logger.info(sprintf("%d individuals with NA attachment type removed from study.", n_lost),
-                    call. = FALSE, immediate. = TRUE)
-      }
-    } 
-  }
-  
-  if(!is.null(group_comparison_individual) && group_comparison_individual == "survival_year"){
-    logger.info("Grouping by survival year...")
-    
-    if(is.null(survival_yr_start)){ 
-      logger.error("This comparison only makes sense if survival years are defined.")
-      
-    } else {
-      logger.info("... with yearly survival")
-      
-      # Ensure different conditions are present
-      non_na_unique <- unique(na.omit(yearly_survival$survival_year))
-      if (length(non_na_unique) <= 1) {
-        if (length(non_na_unique) == 0) {
-          logger.warn("Warning: The grouping variable is entirely NA; no comparison is possible.")
-        } else {
-          logger.warn("Warning: There is only one non-NA grouping variable; no comparison is possible.")
-        }
-      }
-      
-      # Remove NAs 
-      n_original      <- nrow(yearly_survival)
-      yearly_survival <- yearly_survival[!is.na(yearly_survival$survival_year),] 
-      
-      # Get unique life-stages after cleaning
-      unique_surv_yrs  <- sort(unique(yearly_survival$survival_year))
-      n_surv_yrs       <- length(unique_surv_yrs)
-      
-      logger.info(sprintf("%d survival years detected after cleaning: %s", n_surv_yrs, 
-                          paste(unique_surv_yrs, collapse = ", ")),
-                  call. = FALSE, immediate. = TRUE)
-      
-      n_lost <- n_original - nrow(yearly_survival)
-      if (n_lost > 0) {
-        logger.info(sprintf("%d individuals with NA survival year removed from study.", n_lost),
-                    call. = FALSE, immediate. = TRUE)
       }
     }
-  }  
+  }
   
   
   ## Basic summaries of data ------------------------------------------------
@@ -1399,565 +1250,596 @@ rFunction = function(data,
   } 
   
   
-  ## Survival Analysis: No comparisons ----------------------------------------
+  ## Cox Proportional Hazard Analysis -----------------------------------------
   
   if (is.null(survival_yr_start)) {
     
-    logger.info("Calculating KM using summary table...")
+    warning("Calculating Cox Proportional Hazards using summary table...")
     
-    # Warning for not mortality 
-    if(sum(summary_table$mortality_event) > 0){
-      logger.warn("There are no mortality events in the chosen subset of data.")
+    # Warning for no mortality events
+    if (sum(summary_table$mortality_event) == 0) {
+      warning("There are no mortality events in the chosen subset of data.")
     }
     
-    # Fit model 
+    ## Fit model --
     fitting_data <- summary_table
-    km_fit <- survfit(Surv(entry_time_days, exit_time_days, mortality_event) ~ 1, 
-                      data = summary_table)
     
-    # Data for life table 
-    lt.length.out <- ceiling(max(summary_table$exit_time_days)/life_table_days)
-    times <- round(seq(min(summary_table$entry_time_days), max(summary_table$exit_time_days), 
-                       length.out = lt.length.out))
+    # Collect non-NULL covariates
+    covariates <- c(cox_covariate_1, cox_covariate_2, cox_covariate_3)
+    ref_levels <- list(cox_covariate_1_ref, cox_covariate_2_ref, cox_covariate_3_ref)
+    names(ref_levels) <- c(cox_covariate_1, cox_covariate_2, cox_covariate_3)
+    covariates <- covariates[!is.null(covariates) & !is.na(covariates)]
     
-  } 
-  
-  if(!is.null(survival_yr_start)) {
-    
-    logger.info("Calculating KM using survival table...")
-    
-    # Warning for no mortality 
-    if(sum(yearly_survival$mortality_event) == 0){
-      logger.warn("There are no mortality events in the chosen subset of data.")
+    # Apply reference levels where specified
+    for (cov in covariates) {
+      ref <- ref_levels[[cov]]
+      if (!is.null(ref) && ref %in% levels(factor(fitting_data[[cov]]))) {
+        fitting_data[[cov]] <- relevel(factor(fitting_data[[cov]]), ref = ref)
+      } else if (!is.null(ref)) {
+        warning(paste0("Reference level '", ref, "' not found in covariate '", cov, "' — using default."))
+      }
     }
     
-    # Fit model 
-    fitting_data <- yearly_survival
-    km_fit <- survfit(Surv(days_at_risk, mortality_event) ~ 1, data = yearly_survival)
+    # Build formula dynamically
+    cox_formula <- as.formula(paste("Surv(entry_time_days, exit_time_days, mortality_event) ~",
+                                    paste(covariates, collapse = " + ")))
     
-    # Data for life table 
-    max_days <- max(yearly_survival$days_at_risk, na.rm = TRUE)
-    lt.length.out <- ceiling(max_days / life_table_days) + 1   
-    times <- round(seq(0, max_days, length.out = lt.length.out))
+    # Fit standard Cox, fall back to Firth's if separation detected
+    firth_used         <- FALSE
+    separation_detected <- FALSE
+    
+    coxph_fit <- withCallingHandlers(
+      coxph(cox_formula, data = fitting_data),
+      warning = function(w) {
+        if (grepl("Loglik converged before variable", conditionMessage(w))) {
+          separation_detected <<- TRUE
+          invokeRestart("muffleWarning")
+        }
+      }
+    )
+    
+    # Fall back to Firth's if separation warning was triggered
+    if (separation_detected) {
+      
+      message("Separation detected in coxph — falling back to Firth's penalized Cox model.")
+      coxphf_fit <- coxphf(cox_formula, data = fitting_data,
+                           maxstep = 0.1,   
+                           maxit   = 200) 
+      firth_used  <- TRUE
+      
+      # Align all vectors by coefficient names before assembling the data frame.
+      # ci.lower/ci.upper and prob may use different internal ordering than
+      # coefficients, so explicit name-based indexing prevents silent row mismatch.
+      coef_names <- names(coxphf_fit$coefficients)
+      
+      cox.tab <- data.frame(
+        term      = coef_names,
+        estimate  = exp(coxphf_fit$coefficients[coef_names]),
+        conf.low  = exp(coxphf_fit$ci.lower[coef_names]),
+        conf.high = exp(coxphf_fit$ci.upper[coef_names]),
+        p.value   = coxphf_fit$prob[coef_names],
+        row.names = NULL
+      )
+      
+    } else {
+      # Standard Cox worked cleanly
+      cox.tab <- tidy(coxph_fit, exponentiate = TRUE, conf.int = TRUE)
+    }
+    
+    # Add a flag column so it's clear in the output which model was used
+    cox.tab$model <- ifelse(firth_used, "Firth's Penalized Cox", "Standard Cox")
+    
+    # Save
+    write.csv(cox.tab, file = appArtifactPath("coxph_table.csv"), row.names = FALSE)
+    
+    # Predict survival function for subject with means on all covariates
+    if (firth_used) {
+      coxph_for_survfit <- coxph(cox_formula, data = fitting_data,
+                                 init    = coxphf_fit$coefficients[coef_names],
+                                 control = coxph.control(iter.max = 0))
+      surv.at.means <- survfit(coxph_for_survfit, data = fitting_data)
+    } else {
+      surv.at.means <- survfit(coxph_fit, data = fitting_data)
+    }
+    
+    # Tidy and save
+    surv.at.means.tab <- tidy(surv.at.means)
+    write.csv(surv.at.means.tab, file = appArtifactPath("surv_at_means.csv"), row.names = FALSE)
   }
   
-  # Generate life table ---
-  s <- summary(km_fit, times = times)
-  life_table <- data.frame(time_days        = s$time,
-                           n_risk           = s$n.risk,
-                           n_event          = s$n.event,
-                           survival_prob    = s$surv,
-                           std_err          = s$std.err,
-                           lower_95         = s$lower,
-                           upper_95         = s$upper)
+  if (!is.null(survival_yr_start)) {
+    
+    warning("Calculating KM using survival table...")
+    
+    # Warning for no mortality events
+    if (sum(yearly_survival$mortality_event) == 0) {
+      warning("There are no mortality events in the chosen subset of data.")
+    }
+    
+    ## Fit model --
+    fitting_data <- yearly_survival
+    
+    # Collect non-NULL covariates
+    covariates <- c(cox_covariate_1, cox_covariate_2, cox_covariate_3)
+    ref_levels <- list(cox_covariate_1_ref, cox_covariate_2_ref, cox_covariate_3_ref)
+    names(ref_levels) <- c(cox_covariate_1, cox_covariate_2, cox_covariate_3)
+    
+    covariates <- covariates[!is.null(covariates) & !is.na(covariates)]
+    
+    # Apply reference levels where specified
+    for (cov in covariates) {
+      ref <- ref_levels[[cov]]
+      if (!is.null(ref) && ref %in% levels(factor(fitting_data[[cov]]))) {
+        fitting_data[[cov]] <- relevel(factor(fitting_data[[cov]]), ref = ref)
+      } else if (!is.null(ref)) {
+        warning(paste0("Reference level '", ref, "' not found in covariate '", cov, "' — using default."))
+      }
+    }
+    
+    # Build formula dynamically
+    cox_formula <- as.formula(paste("Surv(entry_time_days, exit_time_days, mortality_event) ~",
+                                    paste(covariates, collapse = " + ")))
+    
+    # Fit standard Cox, fall back to Firth's if separation detected
+    firth_used          <- FALSE
+    separation_detected <- FALSE
+    
+    coxph_fit <- withCallingHandlers(
+      coxph(cox_formula, data = fitting_data),
+      warning = function(w) {
+        if (grepl("Loglik converged before variable", conditionMessage(w))) {
+          separation_detected <<- TRUE
+          invokeRestart("muffleWarning")
+        }
+      }
+    )
+    
+    # Fall back to Firth's if separation warning was triggered
+    if (separation_detected) {
+      
+      message("Separation detected in coxph — falling back to Firth's penalized Cox model.")
+      coxphf_fit <- coxphf(cox_formula, data = fitting_data,
+                           maxstep = 0.1,
+                           maxit   = 200)
+      firth_used <- TRUE
+      
+      # Align all vectors by coefficient names before assembling the data frame.
+      # ci.lower/ci.upper and prob may use different internal ordering than
+      # coefficients, so explicit name-based indexing prevents silent row mismatch.
+      coef_names <- names(coxphf_fit$coefficients)
+      
+      cox.tab <- data.frame(
+        term      = coef_names,
+        estimate  = exp(coxphf_fit$coefficients[coef_names]),
+        conf.low  = exp(coxphf_fit$ci.lower[coef_names]),
+        conf.high = exp(coxphf_fit$ci.upper[coef_names]),
+        p.value   = coxphf_fit$prob[coef_names],
+        row.names = NULL
+      )
+      
+    } else {
+      # Standard Cox worked cleanly
+      cox.tab <- tidy(coxph_fit, exponentiate = TRUE, conf.int = TRUE)
+    }
+    
+    # Add a flag column so it's clear in the output which model was used
+    cox.tab$model <- ifelse(firth_used, "Firth's Penalized Cox", "Standard Cox")
+    
+    # Save
+    write.csv(cox.tab, file = appArtifactPath("coxph_table.csv"), row.names = FALSE)
+    
+    # Predict survival function for subject with means on all covariates
+    if (firth_used) {
+      coxph_for_survfit <- coxph(cox_formula, data = fitting_data,
+                                 init    = coxphf_fit$coefficients[coef_names],
+                                 control = coxph.control(iter.max = 0))
+      surv.at.means <- survfit(coxph_for_survfit, data = fitting_data)
+    } else {
+      surv.at.means <- survfit(coxph_fit, data = fitting_data)
+    }
+    
+    # Tidy and save
+    surv.at.means.tab <- tidy(surv.at.means)
+    write.csv(surv.at.means.tab, file = appArtifactPath("surv_at_means.csv"), row.names = FALSE)
+  }
   
-  # Save 
-  write.csv(life_table, file = appArtifactPath("life_table.csv"), row.names = F)
   
-  # Plot KM curve ---
-  n.ind <- nrow(fitting_data)
-  n.events <- nrow(fitting_data[fitting_data$mortality_event == 1,])
-  n.days <- as.numeric(summary(km_fit)$table["median"])
-  med <- survminer::surv_median(km_fit)
-  
-  km_curve <- ggsurvplot(
-    km_fit,
-    data = fitting_data,
-    title = "Kaplan-Meier Survival Curve",
-    subtitle = paste0("N = ", n.ind, ", Events = ", n.events, ", Median Survival = ", 
-                      med$median, " days"),
-    xlab = "Time (days)",
-    ylab = "Survival Probability",
-    risk.table = FALSE,
-    conf.int = TRUE,
-    censor.shape = "|",
-    censor.size = 3,
-    legend = "none",
-    pval = FALSE,
-    surv.median.line = "hv",        
-    palette = c("#E69F00", "#56B4E9"),
-    ggtheme = theme_classic(base_size = 12) + 
-      theme(plot.title         = element_text(face = "bold", size = 14), 
-            plot.subtitle      = element_text(size = 12, color = "gray50"),
-            axis.text          = element_text(color = "black"),
-            panel.grid.major.y = element_line(color = "gray90"), 
-            panel.border       = element_rect(color = "black", fill = NA, linewidth = 0.5),
-            line               = element_line(linewidth = 0.1),
-            plot.margin        = margin(10, 10, 10, 10)))
+  ## Plot of predicted survival for subject at means of covariates --- 
+  surv_plot <- ggsurvfit(surv.at.means) +
+    add_confidence_interval() +
+    add_risktable(risktable_stats = c("n.risk", "cum.event"),
+                  theme = theme_risktable_default(axis.text.y.size = 9)) +
+    labs(title    = "Predicted Survival at Covariate Means",
+         subtitle = ifelse(firth_used, "Firth's Penalized Cox Model", "Standard Cox Model"),
+         x        = "Days",
+         y        = "Survival Probability") +
+    scale_y_continuous(limits = c(0, 1), labels = percent_format(accuracy = 1)) +
+    scale_x_continuous(expand = c(0.02, 0),
+                       breaks = pretty(range(surv.at.means.tab$time), n = 8)) + 
+    theme_classic(base_size = 12) +
+    theme(plot.title       = element_text(face = "bold", size = 14),
+          plot.subtitle    = element_text(size = 10, color = "grey40"),
+          axis.title       = element_text(face = "bold"),
+          legend.position  = "none",
+          panel.grid.major.y = element_line(color = "grey92"))
   
   # Save plot  
-  png(appArtifactPath("km_survival_curve.png"), width = 10, height = 8, units = "in", res = 300)
-  print(km_curve)
+  png(appArtifactPath("surv_at_means_plot.png"), width = 7, height = 6, units = "in", res = 300)
+  print(surv_plot)
   dev.off()
   
   
-  # Plot cumulative hazard curve --- 
-  cum_hazard <- ggsurvplot(
-    km_fit,
-    data = fitting_data,
-    fun = "cumhaz",
-    conf.int = TRUE,
-    risk.table = FALSE,
-    cumevents = FALSE,                 
-    pval = FALSE,                     
-    xlab = "Time (days)",
-    ylab = "Cumulative Hazard",
-    title = "Cumulative Hazard",
-    subtitle = paste0("N = ", n.ind, ", Events = ", n.events), 
-    palette = c("#E69F00", "#56B4E9"),
-    legend = "none",
-    ggtheme = theme_classic(base_size = 12) + 
-      theme(plot.title   = element_text(face = "bold", size = 14), 
-            plot.subtitle = element_text(size = 12, color = "gray50"),
-            axis.text    = element_text(color = "black"),
-            panel.grid.major.y = element_line(color = "gray90"), 
-            panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
-            plot.margin  = margin(10, 10, 10, 10)))
+  ## Plot cumulative hazard curve --- 
+  cum_hazard <- ggsurvfit(surv.at.means, type = "cumhaz") +
+    add_confidence_interval() +
+    labs(title = "Cumulative Hazard at Covariate Means", x = "Days", y = "Cumulative Hazard") +
+    scale_x_continuous(breaks = pretty(range(surv.at.means.tab$time), n = 8)) +
+    theme_classic(base_size = 12)
   
-  # Save plot 
-  png(appArtifactPath("cumulative_hazard_plot.png"), width = 10, height = 8, units = "in", res = 300)
+  # Save plot  
+  png(appArtifactPath("cum_hazard_at_means_plot.png"), width = 7, height = 6, units = "in", res = 300)
   print(cum_hazard)
   dev.off()
   
   
-  ## Survival Analysis: Group comparisons -------------------------------------
-  
-  # Dynamically update comparison variables 
-  grouping_labels <- c("model"                         = "Tag Model",
-                       "sex"                           = "Sex",
-                       "attachment"                    = "Tag Attachment", 
-                       "survival_year"                 = "Survival Year",
-                       "animal_life_stage_new"         = "Lifestage")
-  
-  # For yearly_summary data 
-  if (!is.null(group_comparison_individual) && !is.null(survival_yr_start)){
-    logger.info(paste0("Comparing ", group_comparison_individual, " using yearly survival data"))
+  ## Plot Schoenfeld residuals ---
+  if (!firth_used) {
+    ph_test <- cox.zph(coxph_fit)
+    print(ph_test)
     
-    # Update headings if necessary
-    if(group_comparison_individual == "lifestage"){group_comparison_individual <- "animal_life_stage_new"}
+    ph_plot <- ggcoxzph(ph_test,
+                        point.col = "steelblue",
+                        point.size = 1.5,
+                        point.alpha = 0.5) 
     
-    # Fit survival object 
-    surv_formula <- as.formula(paste("Surv(days_at_risk, mortality_event) ~", group_comparison_individual))
-    km_fit_comp <- survfit(surv_formula, data = yearly_survival) 
+    # Save 
+    png(appArtifactPath("schoenfeld_residuals.png"), 
+        width  = 8, 
+        height = 3 * length(covariates), 
+        dpi    = 300)
+    print(ph_plot)
+    dev.off()
     
-    # Log-Rank test --- 
-    test <- survdiff(surv_formula, data=yearly_survival)
+  } else {
+    # Firth's Cox: coxph_for_survfit is a coxph object frozen at Firth's coefficients
+    # PH test is approximate — coefficients are from Firth's model but SE/residuals from coxph
+    ph_test <- cox.zph(coxph_for_survfit)
+    print(ph_test)
     
-    # Extract components
-    groups       <- names(test$n)
-    n_total      <- sum(test$n)
-    events_total <- sum(test$obs)
-    chisq_val    <- round(test$chisq, 2)
-    df_val       <- length(test$n) - 1
-    p_val        <- 1 - pchisq(test$chisq, df_val)
-    p_formatted  <- ifelse(p_val < 0.001, "<0.001", sprintf("%.3f", p_val))
+    ph_plots <- suppressWarnings(
+      ggcoxzph(ph_test,
+               point.col   = "steelblue",
+               point.size  = 1.5,
+               point.alpha = 0.5)
+    )
     
-    grouping_var <- grouping_labels[[group_comparison_individual]]
-    if (is.na(grouping_var)) {
-      logger.error("Unknown grouping variable: ", group_comparison_individual)
-    }
-    
-    # Summary table 
-    per_group <- tibble(!!grouping_var   := sub(".*=", "", groups),
-                        `N`                      = test$n,
-                        `Events`                 = test$obs,
-                        `Expected events`        = round(test$exp, 2),
-                        `O/E ratio`              = round(test$obs / test$exp, 2)) %>%
-      mutate(`N (events)` = sprintf("%d (%d)", N, Events), .keep = "unused")
-    
-    summary_row <- tibble(!!grouping_var          := "Overall",
-                          `N (events)`             = sprintf("%d (%d)", n_total, events_total),
-                          `Chisq (log-rank)`       = chisq_val,
-                          `df`                     = df_val,
-                          `p-value`                = p_formatted)
-    
-    logrank_table <- bind_rows(per_group, summary_row)
-    logrank_table <- logrank_table %>%
-      dplyr::select(any_of(grouping_var), `N (events)`, `Expected events`, `O/E ratio`,
-                    `Chisq (log-rank)`, df, `p-value`)
+    # Add caption to each plot in the list
+    ph_plots <- lapply(ph_plots, function(p) {
+      p + 
+        labs(caption = "Note: Schoenfeld residuals are approximate — model fit via Firth's penalized Cox.") +
+        theme(plot.caption = element_text(color = "grey40", size = 8))
+    })
+    ph_combined <- wrap_plots(ph_plots, ncol = 1)
     
     # Save
-    write.csv(logrank_table, file = appArtifactPath("logrank_table_statistics.csv"), row.names = F)
+    png(appArtifactPath("schoenfeld_residuals.png"), 
+        width  = 8, 
+        height = 3 * length(covariates), 
+        dpi    = 300)
+    print(ph_combined)
+    dev.off()
+  }
+  
+  
+  ## Plot forest plot of hazard ratios --- 
+  forest_plot <- ggplot(cox.tab, aes(x = estimate, y = term)) +
+    geom_point(size = 3) +
+    geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), height = 0.2) +
+    geom_vline(xintercept = 1, linetype = "dashed", color = "red") +
+    scale_x_log10() +  # HRs are naturally log-scaled
+    labs(
+      title    = "Hazard Ratios with 95% Confidence Intervals",
+      subtitle = ifelse(firth_used, "Firth's Penalized Cox Model", "Standard Cox Model"),
+      x        = "Hazard Ratio (log scale)",
+      y        = NULL
+    ) +
+    theme_classic(base_size = 12) +
+    theme(plot.title = element_text(face = "bold"))
+  
+  ggsave(appArtifactPath("forest_plot.png"), forest_plot, width = 7, height = 5, dpi = 300)
+  
+  
+  ## Stratified Survival Plots & Group Comparisons ----------------------------
+  
+  active_covariates <- list(
+    list(var = cox_covariate_1, ref = cox_covariate_1_ref),
+    list(var = cox_covariate_2, ref = cox_covariate_2_ref),
+    list(var = cox_covariate_3, ref = cox_covariate_3_ref)
+  )
+  active_covariates <- Filter(function(x) !is.null(x$var), active_covariates)
+  
+  fitting_data <- if (is.null(survival_yr_start)) summary_table else yearly_survival
+  
+  for (cov_item in active_covariates) {
     
+    cov <- cov_item$var
+    ref <- cov_item$ref
     
-    # KM comparison plots ---
-    km_fit_comp <- surv_fit(surv_formula, data = yearly_survival)  
+    warning(paste("Producing group comparison outputs for:", cov))
     
-    # Check if any groups have N == 1 and remove 
-    filter_singleton_strata_refit <- function(fit, data) {
-      
-      grouping_var <- all.vars(formula(fit))[3]    
-      n_per_group <- fit$n
-      group_names <- sub(".*=", "", names(fit$strata) %||% "Overall")
-      
-      singletons <- n_per_group == 1
-      removed <- group_names[singletons]   
-      
-      if (any(singletons)) {
-        logger.info(paste("Removed the following singleton group(s) (N=1):\n",
-                          paste(" •", removed, collapse = "\n ")), call. = FALSE)
-        
-        # Filter data using clean group names
-        data_clean <- data[!data[[grouping_var]] %in% removed, , drop = FALSE]
-        
-        # Refit 
-        km_clean <- surv_fit(formula(fit), data = data_clean)
-        return(km_clean)
-      }
-      return(fit)
-    }
-    
-    km_fit_clean <- filter_singleton_strata_refit(km_fit_comp, yearly_survival)
-    
-    title_text <- paste0("Kaplan-Meier Survival Curve: ", grouping_var)
-    group_rows <- logrank_table %>% filter(!!sym(grouping_var) != "Overall") 
-    group_rows_clean <- group_rows %>% filter(!str_detect(`N (events)`, "^1\\s*\\("))
-    removed_groups <- group_rows %>% filter(str_detect(`N (events)`, "^1\\s*\\(")) %>%
-      pull(1)
-    
-    if (length(removed_groups) > 0) {
-      logger.info(paste0("The following group(s) had N=1 and were removed from the table:\n • ",
-                         paste(removed_groups, collapse = "\n • ")), call. = FALSE)
-    }
-    
-    if (nrow(group_rows_clean == 1)){
-      logger.fatal("There is only one group left; unable to perform comparisons.")
-      
+    # Apply reference level if specified
+    if (!is.null(ref) && ref %in% unique(fitting_data[[cov]])) {
+      fitting_data[[cov]] <- relevel(factor(fitting_data[[cov]]), ref = ref)
     } else {
-      subtitle_text <- paste0(paste(sprintf("N_%s: %s", 
-                                            group_rows_clean[[grouping_var]],
-                                            group_rows_clean$`N (events)`),
-                                    collapse = ", "),
-                              "\nP-value: ", 
-                              logrank_table$`p-value`[logrank_table[[grouping_var]] == "Overall"])
-      
-      old_strata_names <- names(km_fit_clean$strata)
-      new_strata_names <- sub(".*=", "", old_strata_names)
-      names(km_fit_clean$strata) <- new_strata_names
-      
-      n_groups <- length(names(km_fit_clean$strata))
-      my_palette <- viridis(n_groups, option = "turbo")
-      
-      # Plot 
-      km_comp_curve <- ggsurvplot(km_fit_clean,
-                                  data = yearly_survival,
-                                  title = title_text,
-                                  subtitle = subtitle_text,
-                                  conf.int = TRUE,
-                                  risk.table = FALSE,
-                                  palette = my_palette, 
-                                  xlab = "Days at risk",
-                                  ylab = "Survival probability",
-                                  legend.title = grouping_var,
-                                  legend = "bottom",
-                                  legend.labs = levels(summary_table[[group_comparison_individual]]),
-                                  censor.shape = "|",
-                                  censor.size = 4,
-                                  font.main = c(14, "bold", "black"),
-                                  font.x = 12, font.y = 12, font.tickslab = 11, 
-                                  ggtheme = theme_classic(base_size = 12) +
-                                    theme(plot.title   = element_text(face = "bold", size = 14),
-                                          plot.subtitle = element_text(size = 12, color = "gray50"),
-                                          axis.text    = element_text(color = "black"),
-                                          panel.grid.major.y = element_line(color = "gray90"),
-                                          panel.border = element_rect(color="black", fill=NA, linewidth=0.5),
-                                          plot.margin  = margin(10, 10, 10, 10)))
-      
-      km_comp_curve$plot <- km_comp_curve$plot + 
-        guides(color = guide_legend(nrow = ifelse(n_groups <= 4, 1, 2), byrow = TRUE,
-                                    title.position = "top"))
-      
-      # Save plot 
-      png(appArtifactPath("km_comparison_curves.png"), width = 10, height = 8, units = "in", res = 300)
-      print(km_comp_curve)
-      dev.off()
-      
-      
-      ## Cumulative hazard comparison plots ---
-      
-      # Prepare statistics for subtitle 
-      n_per_group      <- km_fit_clean$n
-      sum_fit          <- summary(km_fit_clean)
-      events_per_group <- tapply(sum_fit$n.event, sum_fit$strata, sum, na.rm = TRUE)
-      
-      # Clean strata names  
-      clean_strata <- gsub("^.*=", "", names(km_fit_clean$strata))
-      
-      # Create one-line subtitle for groups: "N(Group): N (events)"
-      subtitle_parts <- mapply(function(group, n, ev) {
-        sprintf("N_%s: %d(%d)", group, n, ev)
-      },
-      clean_strata, n_per_group, events_per_group, SIMPLIFY = FALSE)
-      
-      groups_line <- paste(subtitle_parts, collapse = ", ")
-      test <- surv_pvalue(km_fit_clean, data = yearly_survival)
-      pval_text <- sprintf("P-value: %.3f", test$pval)
-      subtitle_text <- paste0(groups_line, "\n", pval_text)
-      
-      # Plot 
-      cum_hazard_comp <- ggsurvplot(km_fit_clean,
-                                    data         = yearly_survival,
-                                    fun          = "cumhaz",
-                                    conf.int     = TRUE,
-                                    censor.shape = "|",
-                                    censor.size  = 4,
-                                    title        = paste0("Cumulative Hazard by ", grouping_var),
-                                    subtitle     = subtitle_text,   
-                                    xlab         = "Days at risk",
-                                    ylab         = "Cumulative Hazard",
-                                    legend       = "bottom",
-                                    legend.title = grouping_var,
-                                    legend.labs  = levels(summary_table[[group_comparison_individual]]),
-                                    palette      = my_palette,
-                                    risk.table   = FALSE,
-                                    cumevents    = FALSE,
-                                    font.main    = c(14, "bold", "black"),
-                                    font.x       = 12, font.y = 12, font.tickslab = 11,
-                                    ggtheme = theme_classic(base_size = 12) +
-                                      theme(plot.title    = element_text(face = "bold", size = 14),
-                                            plot.subtitle = element_text(size = 12, color = "gray50"),
-                                            axis.text     = element_text(color = "black"),
-                                            panel.grid.major.y = element_line(color = "gray90"),
-                                            panel.border  = element_rect(color = "black", fill=NA, linewidth=0.5),
-                                            plot.margin   = margin(10, 10, 10, 10),
-                                            legend.position = "bottom",
-                                            legend.title  = element_text(size = 11),
-                                            legend.text   = element_text(size = 10)))
-      
-      cum_hazard_comp$plot <- cum_hazard_comp$plot + 
-        guides(color = guide_legend(nrow = ifelse(n_groups <= 4, 1, 2), byrow = TRUE,
-                                    title.position = "top"))
-      
-      # Save plot  
-      png(appArtifactPath("cum_hazard_comparison_plot.png"), width = 10, height = 8, units = "in", res = 300)
-      print(cum_hazard_comp)
-      dev.off()
-    }
-  } 
-  
-  # For summary table data 
-  if(!is.null(group_comparison_individual) && is.null(survival_yr_start)) {
-    logger.info(paste0("Comparing ", group_comparison_individual, " using summary table data"))
-    
-    # Fit survival object ---
-    summary_table$time_at_risk <- summary_table$exit_time_days - summary_table$entry_time_days
-    formula_str <- paste("Surv(time_at_risk, mortality_event) ~", group_comparison_individual)
-    surv_formula <- as.formula(formula_str)
-    km_fit_comp <- survfit(surv_formula, data = summary_table)
-    
-    
-    # Log-Rank test --- 
-    test <- survdiff(surv_formula, data=summary_table)
-    
-    # Extract components
-    groups <- names(test$n)
-    n_total <- sum(test$n)
-    events_total <- sum(test$obs)
-    chisq_val <- round(test$chisq, 2)
-    df_val <- length(test$n) - 1
-    p_val <- 1 - pchisq(test$chisq, df_val)
-    p_formatted <- ifelse(p_val < 0.001, "<0.001", sprintf("%.3f", p_val))
-    
-    # Dynamically update comparison variables 
-    grouping_labels <- c("model"                         = "Tag model",
-                         "sex"                           = "Sex",
-                         "attachment"                    = "Tag Attachment")
-    grouping_var <- grouping_labels[[group_comparison_individual]]
-    if (is.na(grouping_var)) {
-      logger.error("Unknown grouping variable: ", group_comparison_individual)
+      fitting_data[[cov]] <- factor(fitting_data[[cov]])
     }
     
-    # Summary table 
-    per_group <- tibble(!!grouping_var   := sub(".*=", "", groups),
-                        `N`               = test$n,
-                        `Events`          = test$obs,
-                        `Expected events` = round(test$exp, 2),
-                        `O/E ratio`       = round(test$obs / test$exp, 2)) %>%
-      mutate(`N (events)` = sprintf("%d (%d)", N, Events), .keep = "unused")
+    n_groups <- length(levels(fitting_data[[cov]]))
+    pal      <- viridis(n_groups, option = "turbo", end = 0.9)
+    
+    km_formula <- as.formula(paste("Surv(entry_time_days, exit_time_days, mortality_event) ~", cov))
     
     
-    summary_row <- tibble(!!grouping_var          := "Overall",
-                          `N (events)`             = sprintf("%d (%d)", n_total, events_total),
-                          `Chisq (log-rank)`       = chisq_val,
-                          `df`                     = df_val,
-                          `p-value`                = p_formatted)
+    ## 1. Cox model tests (LR, Wald, Score) ------------------------------------
     
-    logrank_table <- bind_rows(per_group, summary_row)
-    logrank_table <- logrank_table %>%
-      dplyr::select(any_of(grouping_var), 
-                    `N (events)`,
-                    `Expected events`,
-                    `O/E ratio`,
-                    `Chisq (log-rank)`,
-                    df,
-                    `p-value`)
+    cox_strat_fit <- coxph(km_formula, data = fitting_data)
+    cox_summary   <- summary(cox_strat_fit)
     
-    # Save
-    write.csv(logrank_table, file = appArtifactPath("logrank_table_statistics.csv"), row.names = F)
+    test_results <- data.frame(
+      covariate = cov,
+      test      = c("Likelihood Ratio", "Wald", "Score"),
+      chi_sq    = round(c(cox_summary$logtest["test"],
+                          cox_summary$waldtest["test"],
+                          cox_summary$sctest["test"]), 3),
+      df        = c(cox_summary$logtest["df"],
+                    cox_summary$waldtest["df"],
+                    cox_summary$sctest["df"]),
+      p_value   = round(c(cox_summary$logtest["pvalue"],
+                          cox_summary$waldtest["pvalue"],
+                          cox_summary$sctest["pvalue"]), 4)
+    )
+    
+    write.csv(test_results,
+              file      = appArtifactPath(paste0("model_tests_", cov, ".csv")),
+              row.names = FALSE)
     
     
-    # KM comparison plots ---
-    km_fit_comp <- surv_fit(surv_formula, data = summary_table)   
+    # Use LR p-value for plot subtitles
+    lr_p <- test_results$p_value[1]
     
-    # Check if any groups have N == 1 and remove 
-    filter_singleton_strata_refit <- function(fit, data) {
-      grouping_var <- all.vars(formula(fit))[3]   
-      n_per_group <- fit$n
-      group_names <- sub(".*=", "", names(fit$strata) %||% "Overall")
+    
+    ## 2. Pairwise comparisons (if >2 groups) ----------------------------------
+    
+    if (n_groups > 2) {
       
-      # Identify groups where N == 1 
-      singletons <- n_per_group == 1
-      removed <- group_names[singletons]    
+      group_levels     <- levels(fitting_data[[cov]])
+      pairs            <- combn(group_levels, 2, simplify = FALSE)
       
-      if (any(singletons)) {
-        logger.info(paste("Removed the following singleton group(s) (N=1):\n",
-                          paste(" •", removed, collapse = "\n ")), call. = FALSE)
-        
-        # Filter data using clean group names
-        data_clean <- data[!data[[grouping_var]] %in% removed, , drop = FALSE]
-        
-        # Refit 
-        km_clean <- surv_fit(formula(fit), data = data_clean)
-        
-        return(km_clean)
-      }
-      return(fit)
+      pairwise_results <- lapply(pairs, function(pair) {
+        sub_data        <- fitting_data[fitting_data[[cov]] %in% pair, ]
+        sub_data[[cov]] <- droplevels(sub_data[[cov]])
+        fit             <- coxph(km_formula, data = sub_data)
+        s               <- summary(fit)
+        data.frame(
+          group_1 = pair[1],
+          group_2 = pair[2],
+          hr      = round(exp(coef(fit)[1]), 3),
+          p_wald  = round(s$waldtest["pvalue"], 4)
+        )
+      })
+      
+      pairwise_df              <- do.call(rbind, pairwise_results)
+      pairwise_df$p_bonferroni <- round(p.adjust(pairwise_df$p_wald, method = "bonferroni"), 4)
+      pairwise_df$significant  <- ifelse(pairwise_df$p_bonferroni < 0.05, "Yes", "No")
+      
+      write.csv(pairwise_df,
+                file      = appArtifactPath(paste0("pairwise_", cov, ".csv")),
+                row.names = FALSE)
+      
+      warning(sprintf("Pairwise comparisons for %s saved (%d pairs, Bonferroni corrected).",
+                      cov, nrow(pairwise_df)))
     }
     
-    km_fit_clean <- filter_singleton_strata_refit(km_fit_comp, summary_table)
     
-    # Titles and formatting 
-    title_text <- paste0("Kaplan-Meier Survival Curve: ", grouping_var)
+    ## 3. HR table for this covariate ------------------------------------------
     
-    group_rows <- logrank_table %>% 
-      filter(!!sym(grouping_var) != "Overall") 
+    cox_strat_tab <- tidy(cox_strat_fit, exponentiate = TRUE, conf.int = TRUE) %>%
+      mutate(covariate = cov)
     
-    # Remove any rows where N = 1 
-    group_rows_clean <- group_rows %>%
-      filter(!str_detect(`N (events)`, "^1\\s*\\("))
+    write.csv(cox_strat_tab,
+              file      = appArtifactPath(paste0("cox_hr_", cov, ".csv")),
+              row.names = FALSE)
     
-    removed_groups <- group_rows %>%
-      filter(str_detect(`N (events)`, "^1\\s*\\(")) %>%
-      pull(1)
     
-    if (length(removed_groups) > 0) {
-      logger.info(paste0("The following group(s) had N=1 and were removed from the table:\n • ",
-                         paste(removed_groups, collapse = "\n • ")), call. = FALSE)
-    }
+    ## 4. KM survival curves stratified by covariate ---------------------------
     
-    if (nrow(group_rows_clean == 1)){
-      logger.fatal("There is only one group left; unable to perform comparisons.")
+    km_fit <- survfit(km_formula, data = fitting_data)
+    
+    km_plot <- ggsurvfit(km_fit, linewidth = 0.9) +
+      add_confidence_interval(alpha = 0.12) +
+      add_risktable(
+        risktable_stats = c("n.risk", "cum.event"),
+        theme = theme_risktable_default(axis.text.y.size = 9)
+      ) +
+      scale_color_manual(values = pal) +
+      scale_fill_manual(values  = pal) +
+      scale_y_continuous(limits = c(0, 1), labels = percent_format(accuracy = 1)) +
+      scale_x_continuous(expand = c(0.02, 0),
+                         breaks = pretty(range(tidy(km_fit)$time), n = 8)) +
+      labs(
+        title    = paste("Kaplan-Meier Survival by", cov),
+        subtitle = sprintf("Cox LR test: chi-sq=%.3f, p=%.4f", test_results$chi_sq[1], lr_p),
+        x        = "Days",
+        y        = "Survival Probability",
+        color    = cov,
+        fill     = cov
+      ) +
+      theme_classic(base_size = 12) +
+      theme(
+        plot.title         = element_text(face = "bold", size = 14),
+        plot.subtitle      = element_text(size = 10, color = "grey40"),
+        legend.position    = "top",
+        panel.grid.major.y = element_line(color = "grey92")
+      )
+    
+    png(appArtifactPath(paste0("km_by_", cov, ".png")),
+        width = 8, height = 7, units = "in", res = 300)
+    print(km_plot)
+    dev.off()
+    
+    
+    ## 5. Per-group median survival summary table ------------------------------
+    
+    km_summary <- tidy(km_fit) %>%
+      group_by(strata) %>%
+      summarise(
+        n_risk_start = first(n.risk),
+        n_events     = sum(n.event, na.rm = TRUE),
+        median_surv  = {
+          cross <- time[estimate <= 0.5]
+          if (length(cross) > 0) first(cross) else NA_real_
+        },
+        surv_at_1yr  = {
+          t365 <- estimate[time <= 365]
+          if (length(t365) > 0) round(last(t365), 3) else NA_real_
+        },
+        .groups = "drop"
+      ) %>%
+      mutate(lr_p_value = lr_p, covariate = cov)
+    
+    write.csv(km_summary,
+              file      = appArtifactPath(paste0("km_summary_", cov, ".csv")),
+              row.names = FALSE)
+    
+    
+    ## 6. Forest plot: per-group HRs -------------------------------------------
+    
+    forest_strat <- ggplot(cox_strat_tab, aes(x = estimate, y = term)) +
+      geom_vline(xintercept = 1, linetype = "dashed", color = "grey50") +
+      geom_errorbarh(aes(xmin = conf.low, xmax = conf.high),
+                     height = 0.25, linewidth = 0.8, color = "grey30") +
+      geom_point(aes(color = p.value < 0.05), size = 3.5) +
+      scale_color_manual(values = c("TRUE" = "#D62728", "FALSE" = "#1F77B4"),
+                         labels = c("TRUE" = "p < 0.05",  "FALSE" = "p ≥ 0.05"),
+                         name   = NULL) +
+      scale_x_log10(labels = number_format(accuracy = 0.01)) +
+      labs(
+        title    = paste("Hazard Ratios —", cov),
+        subtitle = sprintf("Cox LR test: chi-sq=%.3f, p=%.4f", test_results$chi_sq[1], lr_p),
+        x        = "Hazard Ratio (log scale)",
+        y        = NULL
+      ) +
+      theme_classic(base_size = 12) +
+      theme(
+        plot.title      = element_text(face = "bold"),
+        plot.subtitle   = element_text(size = 10, color = "grey40"),
+        legend.position = "top"
+      )
+    
+    ggsave(appArtifactPath(paste0("forest_", cov, ".png")),
+           forest_strat, width = 7, height = 4, dpi = 300)
+    
+    
+    ## 7. Cumulative hazard by group -------------------------------------------
+    
+    cumhaz_plot <- ggsurvfit(km_fit, type = "cumhaz", linewidth = 0.9) +
+      scale_color_manual(values = pal) +
+      scale_fill_manual(values  = pal) +
+      scale_x_continuous(expand = c(0.02, 0),
+                         breaks = pretty(range(tidy(km_fit)$time), n = 8)) +
+      labs(
+        title    = paste("Cumulative Hazard by", cov),
+        subtitle = "Parallel lines support proportional hazards assumption",
+        x        = "Days",
+        y        = "Cumulative Hazard",
+        color    = cov,
+        fill     = cov
+      ) +
+      theme_classic(base_size = 12) +
+      theme(
+        plot.title      = element_text(face = "bold"),
+        plot.subtitle   = element_text(size = 10, color = "grey40"),
+        legend.position = "top"
+      )
+    
+    png(appArtifactPath(paste0("cumhaz_by_", cov, ".png")),
+        width = 7, height = 5, units = "in", res = 300)
+    print(cumhaz_plot)
+    dev.off()
+    
+    
+    ## 8. Log cumulative hazard (log-log) plot: visual PH assumption check -----
+    # Parallel lines = proportional hazards assumption holds
+    
+    km_tidy <- tidy(km_fit) %>%
+      filter(estimate > 0, estimate < 1) %>%
+      mutate(log_time     = log(time),
+             log_log_surv = log(-log(estimate)),
+             group        = strata)
+    
+    loglog_plot <- ggplot(km_tidy, aes(x = log_time, y = log_log_surv, color = group)) +
+      geom_line(linewidth = 0.9) +
+      scale_color_manual(values = pal, name = cov) +
+      labs(
+        title    = paste("Log-Log Survival Plot —", cov),
+        subtitle = "Parallel lines support the proportional hazards assumption",
+        x        = "log(Time)",
+        y        = "log(-log(Survival))"
+      ) +
+      theme_classic(base_size = 12) +
+      theme(
+        plot.title      = element_text(face = "bold"),
+        plot.subtitle   = element_text(size = 10, color = "grey40"),
+        legend.position = "top"
+      )
+    
+    ggsave(appArtifactPath(paste0("loglog_", cov, ".png")),
+           loglog_plot, width = 7, height = 5, dpi = 300)
+    
+    
+    ## 9. Annual survival rate bar chart (yearly mode only) --------------------
+    
+    if (!is.null(survival_yr_start)) {
       
-    } else { 
-      subtitle_text <- paste0(paste(sprintf("N_%s: %s", 
-                                            group_rows_clean[[grouping_var]],
-                                            group_rows_clean$`N (events)`),
-                                    collapse = ", "),
-                              "\nP-value: ", 
-                              logrank_table$`p-value`[logrank_table[[grouping_var]] == "Overall"])
+      annual_surv <- fitting_data %>%
+        group_by(survival_year, .data[[cov]]) %>%
+        summarise(
+          n_animals = n_distinct(individual_id),
+          n_deaths  = sum(mortality_event, na.rm = TRUE),
+          surv_rate = 1 - (n_deaths / n_animals),
+          .groups   = "drop"
+        )
       
-      old_strata_names <- names(km_fit_clean$strata)
-      new_strata_names <- sub(".*=", "", old_strata_names)
-      names(km_fit_clean$strata) <- new_strata_names
+      annual_plot <- ggplot(annual_surv,
+                            aes(x = factor(survival_year),
+                                y = surv_rate,
+                                fill = .data[[cov]])) +
+        geom_col(position = position_dodge(0.8), width = 0.7, alpha = 0.85) +
+        geom_text(aes(label = paste0("n=", n_animals)),
+                  position = position_dodge(0.8),
+                  vjust = -0.4, size = 3, color = "grey30") +
+        scale_fill_manual(values = pal) +
+        scale_y_continuous(limits = c(0, 1.05),
+                           labels = percent_format(accuracy = 1)) +
+        labs(
+          title = paste("Annual Survival Rate by", cov),
+          x     = "Survival Year",
+          y     = "Survival Rate",
+          fill  = cov
+        ) +
+        theme_classic(base_size = 12) +
+        theme(
+          plot.title      = element_text(face = "bold"),
+          legend.position = "top",
+          axis.text.x     = element_text(angle = 45, hjust = 1)
+        )
       
-      n_groups <- length(names(km_fit_clean$strata))
-      my_palette <- viridis(n_groups, option = "turbo")
+      ggsave(appArtifactPath(paste0("annual_surv_by_", cov, ".png")),
+             annual_plot, width = 8, height = 5, dpi = 300)
       
-      # Plot 
-      km_comp_curve <- ggsurvplot(km_fit_clean,
-                                  data = summary_table,
-                                  title = title_text,
-                                  subtitle = subtitle_text,
-                                  conf.int = TRUE,
-                                  risk.table = FALSE,
-                                  palette = my_palette, 
-                                  xlab = "Days at risk",
-                                  ylab = "Survival probability",
-                                  legend.title = grouping_var,
-                                  legend = "bottom",
-                                  legend.labs = levels(summary_table[[group_comparison_individual]]),
-                                  censor.shape = "|",
-                                  censor.size = 4,
-                                  font.main = c(14, "bold", "black"),
-                                  font.x = 12, font.y = 12, font.tickslab = 11, 
-                                  ggtheme = theme_classic(base_size = 12) +
-                                    theme(
-                                      plot.title   = element_text(face = "bold", size = 14),
-                                      plot.subtitle = element_text(size = 12, color = "gray50"),
-                                      axis.text    = element_text(color = "black"),
-                                      panel.grid.major.y = element_line(color = "gray90"),
-                                      panel.border = element_rect(color="black", fill=NA, linewidth=0.5),
-                                      plot.margin  = margin(10, 10, 10, 10)))
-      
-      km_comp_curve$plot <- km_comp_curve$plot + 
-        guides(color = guide_legend(nrow = ifelse(n_groups <= 4, 1, 2), byrow = TRUE,
-                                    title.position = "top"))
-      
-      # Save plot 
-      png(appArtifactPath("km_comparison_curves.png"), width = 10, height = 8, units = "in", res = 300)
-      print(km_comp_curve)
-      dev.off()
-      
-      
-      ## Cumulative hazard comparison plots ---
-      
-      # Prepare statistics for subtitle 
-      n_per_group      <- km_fit_clean$n
-      sum_fit          <- summary(km_fit_clean)
-      events_per_group <- tapply(sum_fit$n.event, sum_fit$strata, sum, na.rm = TRUE)
-      
-      # Clean strata names  
-      clean_strata <- gsub("^.*=", "", names(km_fit_clean$strata))
-      
-      # Create one-line subtitle for groups: "N(Group): N (events)"
-      subtitle_parts <- mapply(function(group, n, ev) {
-        sprintf("N_%s: %d(%d)", group, n, ev)
-      },
-      clean_strata, n_per_group, events_per_group, SIMPLIFY = FALSE)
-      
-      groups_line <- paste(subtitle_parts, collapse = ", ")
-      test <- surv_pvalue(km_fit_clean, data = summary_table)
-      pval_text <- sprintf("P-value: %.3f", test$pval)
-      subtitle_text <- paste0(groups_line, "\n", pval_text)
-      
-      # Plot 
-      cum_hazard_comp <- ggsurvplot(km_fit_clean,
-                                    data = summary_table,
-                                    fun          = "cumhaz",
-                                    conf.int     = TRUE,
-                                    censor.shape = "|",
-                                    censor.size  = 4,
-                                    title        = paste0("Cumulative Hazard by ", grouping_var),
-                                    subtitle     = subtitle_text,   
-                                    xlab         = "Days at risk",
-                                    ylab         = "Cumulative Hazard",
-                                    legend       = "bottom",
-                                    legend.title = grouping_var,
-                                    legend.labs  = levels(summary_table[[group_comparison_individual]]),
-                                    palette      = my_palette,
-                                    risk.table   = FALSE,
-                                    cumevents    = FALSE,
-                                    font.main    = c(14, "bold", "black"),
-                                    font.x       = 12, font.y = 12, font.tickslab = 11,
-                                    ggtheme = theme_classic(base_size = 12) +
-                                      theme(plot.title    = element_text(face = "bold", size = 14),
-                                            plot.subtitle = element_text(size = 12, color = "gray50"),
-                                            axis.text     = element_text(color = "black"),
-                                            panel.grid.major.y = element_line(color = "gray90"),
-                                            panel.border  = element_rect(color = "black", fill=NA, linewidth=0.5),
-                                            plot.margin   = margin(10, 10, 10, 10),
-                                            legend.position = "bottom",
-                                            legend.title  = element_text(size = 11),
-                                            legend.text   = element_text(size = 10)))
-      
-      cum_hazard_comp$plot <- cum_hazard_comp$plot + 
-        guides(color = guide_legend(nrow = ifelse(n_groups <= 4, 1, 2), byrow = TRUE,
-                                    title.position = "top"))
-      
-      # Save plot 
-      png(appArtifactPath("cum_hazard_comparison_plot.png"), width = 10, height = 8, units = "in", res = 300)
-      print(cum_hazard_comp)
-      dev.off()
+      write.csv(annual_surv,
+                file      = appArtifactPath(paste0("annual_surv_", cov, ".csv")),
+                row.names = FALSE)
     }
   }
   

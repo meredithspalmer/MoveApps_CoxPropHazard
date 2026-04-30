@@ -1037,7 +1037,9 @@ rFunction = function(data,
                        expand = expansion(mult = c(0.01, 0.03)))
     
     # Save plot  
-    png(appArtifactPath("tracking_history.png"), width = 10, height = 8, units = "in", res = 300)
+    png(appArtifactPath("tracking_history.png"), 
+        width = 10, height = 8,
+        units = "in", res = 300)
     print(tracking_history)
     dev.off()
     
@@ -1096,7 +1098,9 @@ rFunction = function(data,
               axis.text.y       = element_text(size = 11))
       
       # Save plot  
-      png(appArtifactPath("monthly_mortality.png"), width = 10, height = 8, units = "in", res = 300)
+      png(appArtifactPath("monthly_mortality.png"), 
+          width = 10, height = 8, 
+          units = "in", res = 300)
       print(monthly_mort_plot)
       dev.off()
       
@@ -1177,7 +1181,9 @@ rFunction = function(data,
                        expand      = expansion(mult = c(0.01, 0.03)))
     
     # Save plot  
-    png(appArtifactPath("tracking_history.png"), width = 10, height = 8, units = "in", res = 300)
+    png(appArtifactPath("tracking_history.png"), 
+        width = 10, height = 8, 
+        units = "in", res = 300)
     print(tracking_history)
     dev.off()
     
@@ -1240,7 +1246,9 @@ rFunction = function(data,
               axis.text.y = element_text(size = 11))
       
       # Save plot  
-      png(appArtifactPath("monthly_mortality.png"), width = 10, height = 8, units = "in", res = 300)
+      png(appArtifactPath("monthly_mortality.png"), 
+          width = 10, height = 8, 
+          units = "in", res = 300)
       print(monthly_mort_plot)
       dev.off()
       
@@ -1464,7 +1472,9 @@ rFunction = function(data,
           panel.grid.major.y = element_line(color = "grey92"))
   
   # Save plot  
-  png(appArtifactPath("surv_at_means_plot.png"), width = 7, height = 6, units = "in", res = 300)
+  png(appArtifactPath("surv_at_means_plot.png"), 
+      width = 7, height = 6, 
+      units = "in", res = 300)
   print(surv_plot)
   dev.off()
   
@@ -1477,7 +1487,9 @@ rFunction = function(data,
     theme_classic(base_size = 12)
   
   # Save plot  
-  png(appArtifactPath("cum_hazard_at_means_plot.png"), width = 7, height = 6, units = "in", res = 300)
+  png(appArtifactPath("cum_hazard_at_means_plot.png"), 
+      width = 7, height = 6, 
+      units = "in", res = 300)
   print(cum_hazard)
   dev.off()
   
@@ -1548,7 +1560,12 @@ rFunction = function(data,
     theme_classic(base_size = 12) +
     theme(plot.title = element_text(face = "bold"))
   
-  ggsave(appArtifactPath("forest_plot.png"), forest_plot, width = 7, height = 5, dpi = 300)
+  # Save plot  
+  png(appArtifactPath("forest_plot.png"), 
+      width = 7, height = 5,
+      units = "in", res = 300)
+  print(forest_plot)
+  dev.off()
   
   
   ## Stratified Survival Plots & Group Comparisons ----------------------------
@@ -1582,7 +1599,7 @@ rFunction = function(data,
     km_formula <- as.formula(paste("Surv(entry_time_days, exit_time_days, mortality_event) ~", cov))
     
     
-    ## 1. Cox model tests (LR, Wald, Score) ------------------------------------
+    ## Cox model tests (LR, Wald, Score) ------------------------------------
     
     cox_strat_fit <- coxph(km_formula, data = fitting_data)
     cox_summary   <- summary(cox_strat_fit)
@@ -1605,12 +1622,11 @@ rFunction = function(data,
               file      = appArtifactPath(paste0("model_tests_", cov, ".csv")),
               row.names = FALSE)
     
-    
-    # Use LR p-value for plot subtitles
+    # LR p-value for plot subtitles
     lr_p <- test_results$p_value[1]
     
     
-    ## 2. Pairwise comparisons (if >2 groups) ----------------------------------
+    ## Pairwise comparisons (if >2 groups) ----------------------------------
     
     if (n_groups > 2) {
       
@@ -1622,12 +1638,10 @@ rFunction = function(data,
         sub_data[[cov]] <- droplevels(sub_data[[cov]])
         fit             <- coxph(km_formula, data = sub_data)
         s               <- summary(fit)
-        data.frame(
-          group_1 = pair[1],
-          group_2 = pair[2],
-          hr      = round(exp(coef(fit)[1]), 3),
-          p_wald  = round(s$waldtest["pvalue"], 4)
-        )
+        data.frame(group_1 = pair[1],
+                   group_2 = pair[2],
+                   hr      = round(exp(coef(fit)[1]), 3),
+                   p_wald  = round(s$waldtest["pvalue"], 4))
       })
       
       pairwise_df              <- do.call(rbind, pairwise_results)
@@ -1638,12 +1652,12 @@ rFunction = function(data,
                 file      = appArtifactPath(paste0("pairwise_", cov, ".csv")),
                 row.names = FALSE)
       
-      warning(sprintf("Pairwise comparisons for %s saved (%d pairs, Bonferroni corrected).",
+      logger.info(sprintf("Pairwise comparisons for %s saved (%d pairs, Bonferroni corrected).",
                       cov, nrow(pairwise_df)))
     }
     
     
-    ## 3. HR table for this covariate ------------------------------------------
+    ## HR table for this covariate ------------------------------------------
     
     cox_strat_tab <- tidy(cox_strat_fit, exponentiate = TRUE, conf.int = TRUE) %>%
       mutate(covariate = cov)
@@ -1653,60 +1667,53 @@ rFunction = function(data,
               row.names = FALSE)
     
     
-    ## 4. KM survival curves stratified by covariate ---------------------------
+    ## KM survival curves stratified by covariate ---------------------------
     
     km_fit <- survfit(km_formula, data = fitting_data)
     
     km_plot <- ggsurvfit(km_fit, linewidth = 0.9) +
       add_confidence_interval(alpha = 0.12) +
-      add_risktable(
-        risktable_stats = c("n.risk", "cum.event"),
-        theme = theme_risktable_default(axis.text.y.size = 9)
-      ) +
+      add_risktable(risktable_stats = c("n.risk", "cum.event"),
+                    theme = theme_risktable_default(axis.text.y.size = 9)) +
       scale_color_manual(values = pal) +
       scale_fill_manual(values  = pal) +
       scale_y_continuous(limits = c(0, 1), labels = percent_format(accuracy = 1)) +
       scale_x_continuous(expand = c(0.02, 0),
                          breaks = pretty(range(tidy(km_fit)$time), n = 8)) +
-      labs(
-        title    = paste("Kaplan-Meier Survival by", cov),
-        subtitle = sprintf("Cox LR test: chi-sq=%.3f, p=%.4f", test_results$chi_sq[1], lr_p),
-        x        = "Days",
-        y        = "Survival Probability",
-        color    = cov,
-        fill     = cov
-      ) +
+      labs(title    = paste("Kaplan-Meier Survival by", cov),
+           subtitle = sprintf("Cox LR test: chi-sq=%.3f, p=%.4f", test_results$chi_sq[1], lr_p),
+           x        = "Days",
+           y        = "Survival Probability",
+           color    = cov,
+           fill     = cov) +
       theme_classic(base_size = 12) +
-      theme(
-        plot.title         = element_text(face = "bold", size = 14),
-        plot.subtitle      = element_text(size = 10, color = "grey40"),
-        legend.position    = "top",
-        panel.grid.major.y = element_line(color = "grey92")
-      )
+      theme(plot.title         = element_text(face = "bold", size = 14),
+            plot.subtitle      = element_text(size = 10, color = "grey40"),
+            legend.position    = "top",
+            panel.grid.major.y = element_line(color = "grey92"))
     
     png(appArtifactPath(paste0("km_by_", cov, ".png")),
-        width = 8, height = 7, units = "in", res = 300)
+        width = 8, height = 7, 
+        units = "in", res = 300)
     print(km_plot)
     dev.off()
     
     
-    ## 5. Per-group median survival summary table ------------------------------
+    ## Per-group median survival summary table --------------------------------
     
     km_summary <- tidy(km_fit) %>%
       group_by(strata) %>%
-      summarise(
-        n_risk_start = first(n.risk),
-        n_events     = sum(n.event, na.rm = TRUE),
-        median_surv  = {
-          cross <- time[estimate <= 0.5]
-          if (length(cross) > 0) first(cross) else NA_real_
-        },
-        surv_at_1yr  = {
-          t365 <- estimate[time <= 365]
-          if (length(t365) > 0) round(last(t365), 3) else NA_real_
-        },
-        .groups = "drop"
-      ) %>%
+      summarise(n_risk_start = first(n.risk),
+                n_events     = sum(n.event, na.rm = TRUE),
+                median_surv  = {
+                  cross <- time[estimate <= 0.5]
+                  if (length(cross) > 0) first(cross) else NA_real_
+                },
+                surv_at_1yr  = {
+                  t365 <- estimate[time <= 365]
+                  if (length(t365) > 0) round(last(t365), 3) else NA_real_
+                },
+                .groups = "drop") %>%
       mutate(lr_p_value = lr_p, covariate = cov)
     
     write.csv(km_summary,
@@ -1714,7 +1721,7 @@ rFunction = function(data,
               row.names = FALSE)
     
     
-    ## 6. Forest plot: per-group HRs -------------------------------------------
+    ## Forest plot (per-group HRs) --------------------------------------------
     
     forest_strat <- ggplot(cox_strat_tab, aes(x = estimate, y = term)) +
       geom_vline(xintercept = 1, linetype = "dashed", color = "grey50") +
@@ -1725,53 +1732,51 @@ rFunction = function(data,
                          labels = c("TRUE" = "p < 0.05",  "FALSE" = "p ≥ 0.05"),
                          name   = NULL) +
       scale_x_log10(labels = number_format(accuracy = 0.01)) +
-      labs(
-        title    = paste("Hazard Ratios —", cov),
-        subtitle = sprintf("Cox LR test: chi-sq=%.3f, p=%.4f", test_results$chi_sq[1], lr_p),
-        x        = "Hazard Ratio (log scale)",
-        y        = NULL
-      ) +
+      labs(title    = paste("Hazard Ratios —", cov),
+           subtitle = sprintf("Cox LR test: chi-sq=%.3f, p=%.4f", test_results$chi_sq[1], lr_p),
+           x        = "Hazard Ratio (log scale)",
+           y        = NULL) +
       theme_classic(base_size = 12) +
-      theme(
-        plot.title      = element_text(face = "bold"),
-        plot.subtitle   = element_text(size = 10, color = "grey40"),
-        legend.position = "top"
-      )
+      theme(plot.title      = element_text(face = "bold"),
+            plot.subtitle   = element_text(size = 10, color = "grey40"),
+            legend.position = "top")
     
-    ggsave(appArtifactPath(paste0("forest_", cov, ".png")),
-           forest_strat, width = 7, height = 4, dpi = 300)
+    # Save plot  
+    png(appArtifactPath(paste0("forest_", cov, ".png")), 
+        width = 7, height = 4,
+        units = "in", res = 300)
+    print(forest_strat)
+    dev.off()
     
     
-    ## 7. Cumulative hazard by group -------------------------------------------
+    ## Cumulative hazard by group -------------------------------------------
     
     cumhaz_plot <- ggsurvfit(km_fit, type = "cumhaz", linewidth = 0.9) +
       scale_color_manual(values = pal) +
       scale_fill_manual(values  = pal) +
       scale_x_continuous(expand = c(0.02, 0),
                          breaks = pretty(range(tidy(km_fit)$time), n = 8)) +
-      labs(
-        title    = paste("Cumulative Hazard by", cov),
-        subtitle = "Parallel lines support proportional hazards assumption",
-        x        = "Days",
-        y        = "Cumulative Hazard",
-        color    = cov,
-        fill     = cov
-      ) +
+      labs(title    = paste("Cumulative Hazard by", cov),
+           subtitle = "Parallel lines support proportional hazards assumption",
+           x        = "Days",
+           y        = "Cumulative Hazard",
+           color    = cov,
+           fill     = cov) +
       theme_classic(base_size = 12) +
-      theme(
-        plot.title      = element_text(face = "bold"),
-        plot.subtitle   = element_text(size = 10, color = "grey40"),
-        legend.position = "top"
-      )
+      theme(plot.title      = element_text(face = "bold"),
+            plot.subtitle   = element_text(size = 10, color = "grey40"),
+            legend.position = "top")
     
     png(appArtifactPath(paste0("cumhaz_by_", cov, ".png")),
-        width = 7, height = 5, units = "in", res = 300)
+        width = 7, height = 5, 
+        units = "in", res = 300)
     print(cumhaz_plot)
     dev.off()
     
     
-    ## 8. Log cumulative hazard (log-log) plot: visual PH assumption check -----
-    # Parallel lines = proportional hazards assumption holds
+    ## Log cumulative hazard (log-log) plot: visual PH assumption check -----
+    
+    logger.info("Parallel lines = proportional hazards assumption holds")
     
     km_tidy <- tidy(km_fit) %>%
       filter(estimate > 0, estimate < 1) %>%
@@ -1782,40 +1787,36 @@ rFunction = function(data,
     loglog_plot <- ggplot(km_tidy, aes(x = log_time, y = log_log_surv, color = group)) +
       geom_line(linewidth = 0.9) +
       scale_color_manual(values = pal, name = cov) +
-      labs(
-        title    = paste("Log-Log Survival Plot —", cov),
-        subtitle = "Parallel lines support the proportional hazards assumption",
-        x        = "log(Time)",
-        y        = "log(-log(Survival))"
-      ) +
+      labs(title    = paste("Log-Log Survival Plot —", cov),
+           subtitle = "Parallel lines support the proportional hazards assumption",
+           x        = "log(Time)",
+           y        = "log(-log(Survival))") +
       theme_classic(base_size = 12) +
-      theme(
-        plot.title      = element_text(face = "bold"),
-        plot.subtitle   = element_text(size = 10, color = "grey40"),
-        legend.position = "top"
-      )
+      theme(plot.title      = element_text(face = "bold"),
+            plot.subtitle   = element_text(size = 10, color = "grey40"),
+            legend.position = "top")
     
-    ggsave(appArtifactPath(paste0("loglog_", cov, ".png")),
-           loglog_plot, width = 7, height = 5, dpi = 300)
+    # Save plot  
+    png(appArtifactPath(paste0("loglog_", cov, ".png")), 
+        width = 7, height = 5,
+        units = "in", res = 300)
+    print(loglog_plot)
+    dev.off()
     
     
-    ## 9. Annual survival rate bar chart (yearly mode only) --------------------
+    ## Annual survival rate bar chart (yearly mode only) --------------------
     
     if (!is.null(survival_yr_start)) {
       
       annual_surv <- fitting_data %>%
         group_by(survival_year, .data[[cov]]) %>%
-        summarise(
-          n_animals = n_distinct(individual_id),
-          n_deaths  = sum(mortality_event, na.rm = TRUE),
-          surv_rate = 1 - (n_deaths / n_animals),
-          .groups   = "drop"
-        )
+        summarise(n_animals = n_distinct(individual_id),
+                  n_deaths  = sum(mortality_event, na.rm = TRUE),
+                  surv_rate = 1 - (n_deaths / n_animals),
+                  .groups   = "drop")
       
-      annual_plot <- ggplot(annual_surv,
-                            aes(x = factor(survival_year),
-                                y = surv_rate,
-                                fill = .data[[cov]])) +
+      annual_plot <- ggplot(annual_surv, aes(x = factor(survival_year), 
+                                             y = surv_rate, fill = .data[[cov]])) +
         geom_col(position = position_dodge(0.8), width = 0.7, alpha = 0.85) +
         geom_text(aes(label = paste0("n=", n_animals)),
                   position = position_dodge(0.8),
@@ -1823,21 +1824,21 @@ rFunction = function(data,
         scale_fill_manual(values = pal) +
         scale_y_continuous(limits = c(0, 1.05),
                            labels = percent_format(accuracy = 1)) +
-        labs(
-          title = paste("Annual Survival Rate by", cov),
-          x     = "Survival Year",
-          y     = "Survival Rate",
-          fill  = cov
-        ) +
+        labs(title = paste("Annual Survival Rate by", cov),
+             x     = "Survival Year",
+             y     = "Survival Rate",
+             fill  = cov) +
         theme_classic(base_size = 12) +
-        theme(
-          plot.title      = element_text(face = "bold"),
-          legend.position = "top",
-          axis.text.x     = element_text(angle = 45, hjust = 1)
-        )
+        theme( plot.title      = element_text(face = "bold"),
+               legend.position = "top",
+               axis.text.x     = element_text(angle = 45, hjust = 1))
       
-      ggsave(appArtifactPath(paste0("annual_surv_by_", cov, ".png")),
-             annual_plot, width = 8, height = 5, dpi = 300)
+      # Save plot  
+      png(appArtifactPath(paste0("annual_surv_by_", cov, ".png")), 
+          width = 8, height = 5,
+          units = "in", res = 300)
+      print(annual_plot)
+      dev.off()
       
       write.csv(annual_surv,
                 file      = appArtifactPath(paste0("annual_surv_", cov, ".csv")),

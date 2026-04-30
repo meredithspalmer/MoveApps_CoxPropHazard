@@ -141,38 +141,121 @@
       "type": "STRING"
     },
     {
-      "id": "group_comparison_individual",
-      "name": "Groups for comparison",
-      "description": "If interested in comparing across groups, identify the grouping variable. Note that `survival year` and `life stage` require entry of additional and/or auxiliary data.",
+      "id": "cox_covariate_1",
+      "name": "Covariate for CoxPH modelling",
+      "description": "Identify the covariate variable for grouping. Note that `survival year` and `life stage` require entry of additional and/or auxiliary data.",
+      "defaultValue": "sex",
+      "type": "DROPDOWN",
+      "options": [
+        {
+          "value": "sex",
+          "displayText": "Compare across sexes (m/f/u)"
+        }, 
+        {
+          "value": "lifestage",
+          "displayText": "Compare across life-stages (user-defined)"
+        }, 
+        {
+          "value": "survival_year",
+          "displayText": "Compare across survival years (user-defined)"
+        },
+        {
+          "value": "attachment_type",
+          "displayText": "Compare across attachment types (user-defined)"
+        },
+        {
+          "value": "model",
+          "displayText": "Compare across tag models (user-defined)"
+        }
+      ]
+    }, 
+    {
+      "id": "cox_covariate_1_ref",
+      "name": "Reference level for CoxPH covariate=",
+      "description": "For categorical variables, if appropriate, enter the name of the reference level against which other categories of data will be defined (e.g., `m` if `sex` is selected above). For 'survival year', enter the desired year (e.g., 2015, 2024). For other parameters, you will need the exact spelling,  capitalization, and/or formatting as your desired subset variable.",
+      "defaultValue": null,
+      "type": "STRING"
+    },
+    {
+      "id": "cox_covariate_2",
+      "name": "Covariate for CoxPH modelling",
+      "description": "Identify the covariate variable for grouping. Note that `survival year` and `life stage` require entry of additional and/or auxiliary data.",
       "defaultValue": null,
       "type": "DROPDOWN",
       "options": [
         {
           "value": null,
-          "displayText": "No comparison (all individuals)"
+          "displayText": "No further comparisons"
         },
         {
           "value": "sex",
-          "displayText": "Sex"
-        },
-        {
-          "value": "lifestage",
-          "displayText": "Life stage"
-        },
-        {
-          "value": "attachment_type",
-          "displayText": "Attachment type"
+          "displayText": "Compare across sexes (m/f/u)"
         }, 
         {
-          "value": "model",
-          "displayText": "Model of tag"
+          "value": "lifestage",
+          "displayText": "Compare across life-stages (user-defined)"
         }, 
         {
           "value": "survival_year",
-          "displayText": "Survival year (define below)"
+          "displayText": "Compare across survival years (user-defined)"
+        },
+        {
+          "value": "attachment_type",
+          "displayText": "Compare across attachment types (user-defined)"
+        },
+        {
+          "value": "model",
+          "displayText": "Compare across tag models (user-defined)"
         }
       ]
     }, 
+    {
+      "id": "cox_covariate_2_ref",
+      "name": "Reference level for CoxPH covariate=",
+      "description": "For categorical variables, if appropriate, enter the name of the reference level against which other categories of data will be defined (e.g., `m` if `sex` is selected above). For 'survival year', enter the desired year (e.g., 2015, 2024). For other parameters, you will need the exact spelling,  capitalization, and/or formatting as your desired subset variable.",
+      "defaultValue": null,
+      "type": "STRING"
+    },
+    {
+      "id": "cox_covariate_3",
+      "name": "Covariate for CoxPH modelling",
+      "description": "Identify the covariate variable for grouping. Note that `survival year` and `life stage` require entry of additional and/or auxiliary data.",
+      "defaultValue": null,
+      "type": "DROPDOWN",
+      "options": [
+        {
+          "value": null,
+          "displayText": "No further comparisons"
+        },
+        {
+          "value": "sex",
+          "displayText": "Compare across sexes (m/f/u)"
+        }, 
+        {
+          "value": "lifestage",
+          "displayText": "Compare across life-stages (user-defined)"
+        }, 
+        {
+          "value": "survival_year",
+          "displayText": "Compare across survival years (user-defined)"
+        },
+        {
+          "value": "attachment_type",
+          "displayText": "Compare across attachment types (user-defined)"
+        },
+        {
+          "value": "model",
+          "displayText": "Compare across tag models (user-defined)"
+        }
+      ]
+    }, 
+    {
+      "id": "cox_covariate_3_ref",
+      "name": "Reference level for CoxPH covariate=",
+      "description": "For categorical variables, if appropriate, enter the name of the reference level against which other categories of data will be defined (e.g., `m` if `sex` is selected above). For 'survival year', enter the desired year (e.g., 2015, 2024). For other parameters, you will need the exact spelling,  capitalization, and/or formatting as your desired subset variable.",
+      "defaultValue": null,
+      "type": "STRING"
+    },
     {
       "id": "survival_yr_start",
       "name": "Survival year start",
@@ -224,7 +307,12 @@
       {"name": "tidyr"}, 
       {"name": "purrr"}, 
       {"name": "viridis"}, 
-      {"remotes": "install_git('https://github.com/tidyverse/forcats.git')"}
+      {"remotes": "install_git('https://github.com/tidyverse/forcats.git')"}, 
+      {"name": "ggpubr"}, 
+      {"name": "coxphf"}, 
+      {"name": "ggsurvfit"}, 
+      {"name": "scales"}, 
+      {"name": "patchwork"}
     ]
   },
   "license": {

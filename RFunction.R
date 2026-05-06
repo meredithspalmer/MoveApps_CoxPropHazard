@@ -70,31 +70,52 @@ rFunction = function(data,
       "individual_local_identifier",   
       "timestamp")))
   
-  # Extract relevant track-level attributes
-  desired_cols <- c("animal_birth_hatch_year", "attachment_type",
-                    "capture_method", "capture_timestamp", "death_comments",
-                    "deploy_off_timestamp", "deploy_on_timestamp", "deployment_comments",
-                    "deployment_end_comments", "deployment_end_type", "deployment_id", 
-                    "individual_id", "individual_local_identifier",
-                    "individual_number_of_deployments", "is_test", "mortality_location",
-                    "model", "mortality_type", "mortality_date", "sex", "tag_id", 
-                    "timestamp_first_deployed_location", "timestamp_last_deployed_location")
+  # Columns to drop from track data (administrative/redundant metadata)
+  exclude_cols <- c("acknowledgements",
+                    "citation",
+                    "contact_person_name",
+                    "deployment_local_identifier",
+                    "group_id",
+                    "has_quota",
+                    "i_am_collaborator",
+                    "i_am_owner",
+                    "i_can_see_data",
+                    "i_have_download_access",
+                    "individual_comments",
+                    "license_type",
+                    "main_location",
+                    "principal_investigator_name",
+                    "serial_no",
+                    "study_number_of_deployments",
+                    "study_objective",
+                    "study_permission",
+                    "study_site",
+                    "study_type",
+                    "suspend_license_terms",
+                    "tag_comments",
+                    "tag_failure_comments",
+                    "tag_local_identifier",
+                    "tag_number_of_deployments",
+                    "taxon_canonical_name",
+                    "taxon_detail",
+                    "taxon_ids",
+                    "there_are_data_which_i_cannot_see", 
+                    "is_test")
   
   tracks <- mt_track_data(data) |>
     mutate(mortality_location_filled = if_else(
       is.na(mortality_location) | st_is_empty(mortality_location),
-      0L, 1L)) |> 
-    dplyr::select(any_of(desired_cols))
+      0L, 1L)) |>
+    dplyr::select(-any_of(exclude_cols))
   
   # Join track attributes to every event row
-  use_deployment_join <- all(c("deployment_id") %in% names(events), 
+  use_deployment_join <- all("deployment_id" %in% names(events),
                              "deployment_id" %in% names(tracks)) &&
     any(!is.na(events$deployment_id)) &&
     any(!is.na(tracks$deployment_id))
   
   if (use_deployment_join) {
-    events_with_ind <- events |>
-      left_join(tracks, by = "deployment_id")
+    events_with_ind <- events |> left_join(tracks, by = "deployment_id")
     
   } else {
     if (!"individual_local_identifier" %in% names(events)) {
@@ -105,97 +126,122 @@ rFunction = function(data,
   }
   
   events_with_ind <- events_with_ind |>
-    relocate(any_of(c("individual_id", "individual_local_identifier", "deployment_id", "timestamp")),
+    relocate(any_of(c("individual_id", "individual_local_identifier",
+                      "deployment_id", "timestamp")),
              .before = everything())
   
-  # Summarize timestamps and location count per individual
+  # Infer column groups dynamically 
+  cols_timestamp_min <- c("timestamp_first_deployed_location", "deploy_on_timestamp")
+  cols_timestamp_max <- c("timestamp_last_deployed_location",  "deploy_off_timestamp")
+  
+  cols_already_handled <- c(
+    "individual_id", "individual_local_identifier", "deployment_id",
+    "timestamp", "geometry", "mortality_location", "mortality_location_filled",
+    cols_timestamp_min, cols_timestamp_max
+  )
+  
+  # Character/factor: collapse unique values
+  cols_categorical <- events_with_ind |>
+    select(where(~ is.character(.) || is.factor(.))) |>
+    select(-any_of(cols_already_handled)) |>
+    names()
+  
+  # Numeric and units: mean
+  cols_numeric <- events_with_ind |>
+    select(where(~ is.numeric(.) || inherits(., "units"))) |>
+    select(-any_of(cols_already_handled)) |>
+    names()
+  
+  # Logical: any() (that is, TRUE if any event flagged TRUE)
+  cols_logical <- events_with_ind |>
+    select(where(is.logical)) |>
+    select(-any_of(cols_already_handled)) |>
+    names()
+  
+  # POSIXct/Date not already in explicit min/max lists: take first non-NA value
+  cols_timestamp_first <- events_with_ind |>
+    select(where(~ inherits(., "POSIXct") || inherits(., "Date"))) |>
+    select(-any_of(c(cols_already_handled, cols_timestamp_min, cols_timestamp_max))) |>
+    names()
+  
+  # sfc geometry columns: take first non-empty geometry per individual
+  cols_geometry <- events_with_ind |>
+    select(where(~ inherits(., "sfc"))) |>
+    select(-any_of(cols_already_handled)) |>
+    names()
+  
+  logger.info(paste("Categorical columns:",    paste(cols_categorical,     collapse = ", ")))
+  logger.info(paste("Numeric/units columns:",  paste(cols_numeric,         collapse = ", ")))
+  logger.info(paste("Logical columns:",        paste(cols_logical,         collapse = ", ")))
+  logger.info(paste("Timestamp (first) cols:", paste(cols_timestamp_first, collapse = ", ")))
+  logger.info(paste("Geometry (first) cols:",  paste(cols_geometry,        collapse = ", ")))
+  
+  
+  # Summarise to individual level
+  na_like <- function(x) x[NA_integer_]
+  
+  # Helper function: first non-empty geometry or an empty point if all empty/NA
+  first_non_empty_geom <- function(x) {
+    non_empty <- x[!is.na(x) & !st_is_empty(x)]
+    if (length(non_empty) > 0) non_empty[[1]] else st_point()
+  }
+  
   summary_table <- events_with_ind |>
     group_by(individual_id, individual_local_identifier) |>
-    summarise(first_timestamp = min(as.Date(timestamp), na.rm = TRUE),
-              last_timestamp  = max(as.Date(timestamp), na.rm = TRUE),
-              n_locations     = n(),
-              n_deployments   = 
-                if ("deployment_id" %in% names(events_with_ind)) {
-                  n_distinct(deployment_id, na.rm = TRUE)
-                } else {
-                  1L  
-                },
-              
-              # Time-stamp columns: min / max if present
-              timestamp_first_deployed_location = 
-                if ("timestamp_first_deployed_location" %in% names(events_with_ind))
-                  min(timestamp_first_deployed_location, na.rm = TRUE) else NA,
-              
-              timestamp_last_deployed_location = 
-                if ("timestamp_last_deployed_location" %in% names(events_with_ind))
-                  max(timestamp_last_deployed_location, na.rm = TRUE) else NA,
-              
-              deploy_on_timestamp = 
-                if ("deploy_on_timestamp" %in% names(events_with_ind)) {
-                  if (all(is.na(deploy_on_timestamp))) as.POSIXct(NA) 
-                  else min(deploy_on_timestamp, na.rm = TRUE)
-                } else as.POSIXct(NA),
-              
-              deploy_off_timestamp = if ("deploy_off_timestamp" %in% names(events_with_ind)) {
-                if (all(is.na(deploy_off_timestamp))) as.POSIXct(NA)
-                else max(deploy_off_timestamp, na.rm = TRUE)
-              } else as.POSIXct(NA),
-              
-              # Mortality location column: 1/0 if filled if present 
-              mortality_location_filled = if ("mortality_location_filled" %in% names(events_with_ind))
-                as.integer(any(mortality_location_filled >= 1, na.rm = TRUE)) else NA_integer_,
-              
-              # Categorical columns: collapsed unique if present
-              sex = if ("sex" %in% names(events_with_ind))
-                str_c(unique(sex[!is.na(sex)]), collapse = " | ") else NA_character_,
-              
-              mortality_type = if ("mortality_type" %in% names(events_with_ind)) {
-                str_c(unique(mortality_type[!is.na(mortality_type)]), collapse = " | ")
-              } else NA_character_,
-              
-              mortality_date = if ("mortality_date" %in% names(events_with_ind)) {
-                str_c(unique(mortality_date[!is.na(mortality_date)]), collapse = " | ")
-              } else NA_character_,
-              
-              death_comments = if ("death_comments" %in% names(events_with_ind))
-                str_c(unique(death_comments[!is.na(death_comments)]), collapse = " | ") 
-              else NA_character_,
-              
-              deployment_end_comments = if ("deployment_end_comments" %in% names(events_with_ind))
-                str_c(unique(deployment_end_comments[!is.na(deployment_end_comments)]), collapse = " | ") 
-              else NA_character_,
-              
-              deployment_end_type = if ("deployment_end_type" %in% names(events_with_ind))
-                str_c(unique(deployment_end_type[!is.na(deployment_end_type)]), collapse=" | ") 
-              else NA_character_,
-              
-              animal_life_stage = if ("animal_life_stage" %in% names(events_with_ind))
-                str_c(unique(animal_life_stage[!is.na(animal_life_stage)]), collapse = " | ")
-              else NA_character_,
-              
-              model = if ("model" %in% names(events_with_ind)) {
-                str_c(unique(model[!is.na(model)]), collapse = " | ")
-              } else NA_character_,
-              
-              attachment_type = if ("attachment_type" %in% names(events_with_ind))
-                str_c(unique(attachment_type[!is.na(attachment_type)]), collapse = " | ") 
-              else NA_character_,
-              
-              .groups = "drop") |>
+    summarise(
+      first_timestamp = min(as.Date(timestamp), na.rm = TRUE),
+      last_timestamp  = max(as.Date(timestamp), na.rm = TRUE),
+      n_locations     = n(),
+      
+      n_deployments = if ("deployment_id" %in% names(events_with_ind))
+        n_distinct(deployment_id[!is.na(deployment_id)]) else 1L,
+      
+      mortality_location_filled =
+        if ("mortality_location_filled" %in% names(events_with_ind))
+          as.integer(any(mortality_location_filled >= 1, na.rm = TRUE)) else NA_integer_,
+      
+      across(any_of(cols_timestamp_min),
+             ~ if (all(is.na(.))) na_like(.) else min(., na.rm = TRUE)),
+      
+      across(any_of(cols_timestamp_max),
+             ~ if (all(is.na(.))) na_like(.) else max(., na.rm = TRUE)),
+      
+      # Deployment-level timestamp constants — take first non-NA value
+      across(any_of(cols_timestamp_first),
+             ~ if (all(is.na(.))) na_like(.) else first(na.omit(.))),
+      
+      across(any_of(cols_categorical),
+             ~ if (all(is.na(.))) NA_character_
+             else str_c(unique(.[!is.na(.)]), collapse = " | ")),
+      
+      across(any_of(cols_numeric),
+             ~ if (all(is.na(.))) na_like(.) else mean(., na.rm = TRUE)),
+      
+      # Logical — TRUE if any event is TRUE, NA if all NA
+      across(any_of(cols_logical),
+             ~ if (all(is.na(.))) NA else any(., na.rm = TRUE)),
+      
+      # Geometry — first non-empty geometry, or empty point
+      across(any_of(cols_geometry),
+             ~ st_sfc(first_non_empty_geom(.), crs = st_crs(.))),
+      
+      .groups = "drop") |>
     
     mutate(
-      
-      # Clean empty strings (fill NA) for columns that exist
-      across(any_of(c("death_comments",
-                      "mortality_type",
-                      "mortality_date",
-                      "deployment_end_comments",
-                      "deployment_end_type",
-                      "animal_birth_hatch_year")),
-             ~ if_else(. == "", NA_character_, .)),
-      
-      # Convert deploy timestamps 
-      across(any_of(c("deploy_on_timestamp", "deploy_off_timestamp")), as.Date))
+      across(any_of(cols_categorical), ~ if_else(. == "", NA_character_, .)),
+      across(any_of(c("deploy_on_timestamp", "deploy_off_timestamp")), as.Date)
+    )
+  
+  
+  # Quick checks 
+  unhandled_cols <- setdiff(names(events_with_ind),
+                            c(cols_already_handled, cols_categorical, cols_numeric,
+                              cols_logical, cols_timestamp_first, cols_geometry,
+                              "first_timestamp", "last_timestamp", "n_locations", "n_deployments"))
+  
+  if (length(unhandled_cols) > 0) {
+    logger.warn(paste("Columns not summarised (check types):", paste(unhandled_cols, collapse = ", ")))
+  }
   
   
   ## Clean dates ---
@@ -1452,7 +1498,7 @@ rFunction = function(data,
   }
 
   
-  FIGURE OUT HOW THIS DIFFERS FROM OTHER FOREST PLOT, WHETHER SHOULD BE NESTED
+  FIGURE OUT HOW THIS DIFFERS FROM OTHER FOREST PLOT, WHETHER
   ## Plot forest plot of hazard ratios --- 
   forest_plot <- ggplot(cox.tab, aes(x = estimate, y = term)) +
     geom_point(size = 3) +

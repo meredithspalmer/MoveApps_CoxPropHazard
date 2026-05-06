@@ -1267,172 +1267,86 @@ rFunction = function(data,
   
   ## Cox Proportional Hazard Analysis -----------------------------------------
   
+  # Select fitting data 
   if (is.null(survival_yr_start)) {
-    
     logger.info("Calculating Cox Proportional Hazards using summary table...")
-    
-    # Warning for no mortality events
-    if (sum(summary_table$mortality_event) == 0) {
-      logger.fatal("There are no mortality events in the chosen subset of data.")
-    }
-    
-    ## Fit model --- 
     fitting_data <- summary_table
     
-    # Collect non-NULL covariates
-    covariates <- c(cox_covariate_1, cox_covariate_2, cox_covariate_3)
-    ref_levels <- list(cox_covariate_1_ref, cox_covariate_2_ref, cox_covariate_3_ref)
-    names(ref_levels) <- c(cox_covariate_1, cox_covariate_2, cox_covariate_3)
-    covariates <- covariates[!is.null(covariates) & !is.na(covariates)]
-    
-    # Apply reference levels where specified
-    for (cov in covariates) {
-      ref <- ref_levels[[cov]]
-      if (!is.null(ref) && ref %in% levels(factor(fitting_data[[cov]]))) {
-        fitting_data[[cov]] <- relevel(factor(fitting_data[[cov]]), ref = ref)
-      } else if (!is.null(ref)) {
-        logger.info(paste0("Reference level '", ref, "' not found in covariate '", cov, "' — using default."))
-      }
-    }
-    
-    # Build formula dynamically
-    cox_formula <- as.formula(paste("Surv(entry_time_days, exit_time_days, mortality_event) ~",
-                                    paste(covariates, collapse = " + ")))
-    
-    # Fit standard Cox 
-    firth_used         <- FALSE
-    separation_detected <- FALSE
-    
-    coxph_fit <- withCallingHandlers(
-      coxph(cox_formula, data = fitting_data),
-      warning = function(w) {
-        if (grepl("Loglik converged before variable", conditionMessage(w))) {
-          separation_detected <<- TRUE
-          invokeRestart("muffleWarning")
-        }
-      }
-    )
-    
-    # Apply Firth's if separation warning was triggered
-    if (separation_detected) {
-      
-      logger.warn("Separation detected in coxph — falling back to Firth's penalized Cox model.")
-      coxphf_fit <- coxphf(cox_formula, data = fitting_data,
-                           maxstep = 0.1,   
-                           maxit   = 200) 
-      firth_used  <- TRUE
-      
-      # For Firth's, align vectors by coefficient names 
-      coef_names <- names(coxphf_fit$coefficients)
-      cox.tab <- data.frame(term      = coef_names,
-                            estimate  = exp(coxphf_fit$coefficients[coef_names]),
-                            conf.low  = exp(coxphf_fit$ci.lower[coef_names]),
-                            conf.high = exp(coxphf_fit$ci.upper[coef_names]),
-                            p.value   = coxphf_fit$prob[coef_names],
-                            row.names = NULL)
-      
-    } else {
-      cox.tab <- tidy(coxph_fit, exponentiate = TRUE, conf.int = TRUE)
-    }
-    
-    # Flag which model used
-    cox.tab$model <- ifelse(firth_used, "Firth's Penalized Cox", "Standard Cox")
-    
-    # Save
-    write.csv(cox.tab, file = appArtifactPath("coxph_table.csv"), row.names = FALSE)
-    
-    # Predict survival function for subject with means on all covariates
-    if (firth_used) {
-      coxph_for_survfit <- coxph(cox_formula, data = fitting_data,
-                                 init    = coxphf_fit$coefficients[coef_names],
-                                 control = coxph.control(iter.max = 0))
-      surv.at.means <- survfit(coxph_for_survfit, data = fitting_data)
-    } else {
-      surv.at.means <- survfit(coxph_fit, data = fitting_data)
-    }
-    
-    # Save
-    surv.at.means.tab <- tidy(surv.at.means)
-    write.csv(surv.at.means.tab, file = appArtifactPath("surv_at_means.csv"), row.names = FALSE)
-  }
-  
-  if (!is.null(survival_yr_start)) {
-    
+  } else {
     logger.info("Calculating Cox Proportional Hazards using survival table...")
-    
-    # Warning for no mortality events
-    if (sum(yearly_survival$mortality_event) == 0) {
-      logger.fatal("There are no mortality events in the chosen subset of data.")
-    }
-    
-    ## Fit model --
     fitting_data <- yearly_survival
+  }
+  
+  # Warning for no mortality events
+  if (sum(fitting_data$mortality_event) == 0) {
+    logger.fatal("There are no mortality events in the chosen subset of data.")
+  }
+  
+  # Collect non-NULL covariates
+  covariates <- c(cox_covariate_1, cox_covariate_2, cox_covariate_3)
+  ref_levels <- list(cox_covariate_1_ref, cox_covariate_2_ref, cox_covariate_3_ref)
+  names(ref_levels) <- covariates
+  covariates <- covariates[!is.null(covariates) & !is.na(covariates)]
+
+  # Apply reference levels where specified
+  for (cov in covariates) {
+    ref <- ref_levels[[cov]]
+    if (!is.null(ref) && ref %in% levels(factor(fitting_data[[cov]]))) {
+      fitting_data[[cov]] <- relevel(factor(fitting_data[[cov]]), ref = ref)
+    } else if (!is.null(ref)) {
+      logger.info(paste0("Reference level '", ref, "' not found in covariate '", cov, "' — using default."))
+    }
+  }  
     
-    # Collect non-NULL covariates
-    covariates <- c(cox_covariate_1, cox_covariate_2, cox_covariate_3)
-    ref_levels <- list(cox_covariate_1_ref, cox_covariate_2_ref, cox_covariate_3_ref)
-    names(ref_levels) <- c(cox_covariate_1, cox_covariate_2, cox_covariate_3)
+  # Build formula dynamically
+  cox_formula <- as.formula(paste("Surv(entry_time_days, exit_time_days, mortality_event) ~",
+                                  paste(covariates, collapse = " + ")))
     
-    covariates <- covariates[!is.null(covariates) & !is.na(covariates)]
+  # Fit standard Cox 
+  firth_used          <- FALSE
+  separation_detected <- FALSE
     
-    # Apply reference levels where specified
-    for (cov in covariates) {
-      ref <- ref_levels[[cov]]
-      if (!is.null(ref) && ref %in% levels(factor(fitting_data[[cov]]))) {
-        fitting_data[[cov]] <- relevel(factor(fitting_data[[cov]]), ref = ref)
-      } else if (!is.null(ref)) {
-        logger.info(paste0("Reference level '", ref, "' not found in covariate '", cov, "' — using default."))
+  coxph_fit <- withCallingHandlers(
+    coxph(cox_formula, data = fitting_data),
+    warning = function(w) {
+      if (grepl("Loglik converged before variable", conditionMessage(w))) {
+        separation_detected <<- TRUE
+        invokeRestart("muffleWarning")
       }
     }
+  )
     
-    # Build formula dynamically
-    cox_formula <- as.formula(paste("Surv(entry_time_days, exit_time_days, mortality_event) ~",
-                                    paste(covariates, collapse = " + ")))
+  # Fall back to Firth's penalized Cox if separation detected
+  if (separation_detected) {
+    logger.warn("Separation detected in coxph — falling back to Firth's penalized Cox model.")
+    coxphf_fit <- coxphf(cox_formula, data = fitting_data, maxstep = 0.1, maxit = 200)
+    firth_used  <- TRUE
     
-    # Fit standard Cox 
-    firth_used          <- FALSE
-    separation_detected <- FALSE
-    
-    coxph_fit <- withCallingHandlers(
-      coxph(cox_formula, data = fitting_data),
-      warning = function(w) {
-        if (grepl("Loglik converged before variable", conditionMessage(w))) {
-          separation_detected <<- TRUE
-          invokeRestart("muffleWarning")
-        }
-      }
+    coef_names <- names(coxphf_fit$coefficients)
+    cox.tab <- data.frame(
+      term      = coef_names,
+      estimate  = exp(coxphf_fit$coefficients[coef_names]),
+      conf.low  = exp(coxphf_fit$ci.lower[coef_names]),
+      conf.high = exp(coxphf_fit$ci.upper[coef_names]),
+      p.value   = coxphf_fit$prob[coef_names],
+      row.names = NULL
     )
+  } else {
+    cox.tab <- tidy(coxph_fit, exponentiate = TRUE, conf.int = TRUE)
+  }
+  
+  # Flag which model used
+  cox.tab$model <- ifelse(firth_used, "Firth's Penalized Cox", "Standard Cox")
     
-    # Apply Firth's if separation warning was triggered
-    if (separation_detected) {
-      
-      logger.warn("Separation detected in coxph — falling back to Firth's penalized Cox model.")
-      coxphf_fit <- coxphf(cox_formula, data = fitting_data,
-                           maxstep = 0.1,
-                           maxit   = 200)
-      firth_used <- TRUE
-      
-      # For Firth's, align vectors by coefficient names 
-      coef_names <- names(coxphf_fit$coefficients)
-      
-      cox.tab <- data.frame(term      = coef_names,
-                            estimate  = exp(coxphf_fit$coefficients[coef_names]),
-                            conf.low  = exp(coxphf_fit$ci.lower[coef_names]),
-                            conf.high = exp(coxphf_fit$ci.upper[coef_names]),
-                            p.value   = coxphf_fit$prob[coef_names],
-                            row.names = NULL)
-      
-    } else {
-      cox.tab <- tidy(coxph_fit, exponentiate = TRUE, conf.int = TRUE)
-    }
+  # Save
+  write.csv(cox.tab, file = appArtifactPath("coxph_table.csv"), row.names = FALSE)
     
-    # Flag which model used
-    cox.tab$model <- ifelse(firth_used, "Firth's Penalized Cox", "Standard Cox")
+  
+  ## Results at covariate means -----------------------------------------------
+  
+  if (isTRUE(calc_artifacts_at_mean)) { 
     
-    # Save
-    write.csv(cox.tab, file = appArtifactPath("coxph_table.csv"), row.names = FALSE)
-    
-    # Predict survival function for subject with means on all covariates
+    # Predict survival function for subject with means on all covariates --- 
     if (firth_used) {
       coxph_for_survfit <- coxph(cox_formula, data = fitting_data,
                                  init    = coxphf_fit$coefficients[coef_names],
@@ -1445,104 +1359,100 @@ rFunction = function(data,
     # Save
     surv.at.means.tab <- tidy(surv.at.means)
     write.csv(surv.at.means.tab, file = appArtifactPath("surv_at_means.csv"), row.names = FALSE)
-  }
-  
-  
-  ## Visualizations of results at covariate means -----------------------------
-  
-  # Plot of predicted survival --- 
-  surv_plot <- ggsurvfit(surv.at.means) +
-    add_confidence_interval() +
-    add_risktable(risktable_stats = c("n.risk", "cum.event"),
-                  theme = theme_risktable_default(axis.text.y.size = 9)) +
-    labs(title    = "Predicted Survival at Covariate Means",
-         subtitle = ifelse(firth_used, "Firth's Penalized Cox Model", "Standard Cox Model"),
-         x        = "Days",
-         y        = "Survival Probability") +
-    scale_y_continuous(limits = c(0, 1), labels = percent_format(accuracy = 1)) +
-    scale_x_continuous(expand = c(0.02, 0),
-                       breaks = pretty(range(surv.at.means.tab$time), n = 8)) + 
-    theme_classic(base_size = 12) +
-    theme(plot.title       = element_text(face = "bold", size = 14),
-          plot.subtitle    = element_text(size = 10, color = "grey40"),
-          axis.title       = element_text(face = "bold"),
-          legend.position  = "none",
-          panel.grid.major.y = element_line(color = "grey92"))
-  
-  # Save 
-  png(appArtifactPath("surv_at_means_plot.png"), 
-      width = 7, height = 6, 
-      units = "in", res = 300)
-  print(surv_plot)
-  dev.off()
-  
-  
-  ## Plot cumulative hazard curve --- 
-  cum_hazard <- ggsurvfit(surv.at.means, type = "cumhaz") +
-    add_confidence_interval() +
-    labs(title = "Cumulative Hazard at Covariate Means", x = "Days", y = "Cumulative Hazard") +
-    scale_x_continuous(breaks = pretty(range(surv.at.means.tab$time), n = 8)) +
-    theme_classic(base_size = 12)
-  
-  # Save   
-  png(appArtifactPath("cum_hazard_at_means_plot.png"), 
-      width = 7, height = 6, 
-      units = "in", res = 300)
-  print(cum_hazard)
-  dev.off()
-  
-  
-  ## Plot Schoenfeld residuals ---
-  if (!firth_used) {
-    ph_test <- cox.zph(coxph_fit)
-    print(ph_test)
     
-    ph_plot <- ggcoxzph(ph_test,
-                        point.col = "steelblue",
-                        point.size = 1.5,
-                        point.alpha = 0.5) 
+    
+    # Plot of predicted survival --- 
+    surv_plot <- ggsurvfit(surv.at.means) +
+      add_confidence_interval() +
+      add_risktable(risktable_stats = c("n.risk", "cum.event"),
+                    theme = theme_risktable_default(axis.text.y.size = 9)) +
+      labs(title    = "Predicted Survival at Covariate Means",
+           subtitle = ifelse(firth_used, "Firth's Penalized Cox Model", "Standard Cox Model"),
+           x        = "Days",
+           y        = "Survival Probability") +
+      scale_y_continuous(limits = c(0, 1), labels = percent_format(accuracy = 1)) +
+      scale_x_continuous(expand = c(0.02, 0),
+                         breaks = pretty(range(surv.at.means.tab$time), n = 8)) + 
+      theme_classic(base_size = 12) +
+      theme(plot.title       = element_text(face = "bold", size = 14),
+            plot.subtitle    = element_text(size = 10, color = "grey40"),
+            axis.title       = element_text(face = "bold"),
+            legend.position  = "none",
+            panel.grid.major.y = element_line(color = "grey92"))
     
     # Save 
-    png(appArtifactPath("schoenfeld_residuals.png"), 
-        width  = 8, 
-        height = 3 * length(covariates), 
-        units  = "in",
-        res    = 300)
-    print(ph_plot)
+    png(appArtifactPath("surv_at_means_plot.png"), 
+        width = 7, height = 6, 
+        units = "in", res = 300)
+    print(surv_plot)
     dev.off()
     
-  } else {
-    # Firth's Cox: coxph_for_survfit is a coxph object frozen at Firth's coefficients
-    logger.info("PH test is approximate — coefficients are from Firth's model but SE/residuals from coxph")
-    ph_test <- cox.zph(coxph_for_survfit)
-    print(ph_test)
+    ## Plot cumulative hazard curve --- 
+    cum_hazard <- ggsurvfit(surv.at.means, type = "cumhaz") +
+      add_confidence_interval() +
+      labs(title = "Cumulative Hazard at Covariate Means", x = "Days", y = "Cumulative Hazard") +
+      scale_x_continuous(breaks = pretty(range(surv.at.means.tab$time), n = 8)) +
+      theme_classic(base_size = 12)
     
-    ph_plots <- suppressWarnings(
-      ggcoxzph(ph_test,
-               point.col   = "steelblue",
-               point.size  = 1.5,
-               point.alpha = 0.5)
-    )
-    
-    # Add caption to each plot in the list
-    ph_plots <- lapply(ph_plots, function(p) {
-      p + 
-        labs(caption = "Note: Schoenfeld residuals are approximate — model fit via Firth's penalized Cox.") +
-        theme(plot.caption = element_text(color = "grey40", size = 8))
-    })
-    ph_combined <- wrap_plots(ph_plots, ncol = 1)
-    
-    # Save
-    png(appArtifactPath("schoenfeld_residuals.png"), 
-        width  = 8, 
-        height = 3 * length(covariates), 
-        units  = "in",
-        res    = 300)
-    print(ph_combined)
+    # Save   
+    png(appArtifactPath("cum_hazard_at_means_plot.png"), 
+        width = 7, height = 6, 
+        units = "in", res = 300)
+    print(cum_hazard)
     dev.off()
+  } 
+    
+  
+  ## Diagnostic residuals -----------------------------------------------------
+  
+  if (isTRUE(calc_residuals)){
+    
+    ## Plot Schoenfeld residuals ---
+    if (!firth_used) {
+      ph_test <- cox.zph(coxph_fit)
+      print(ph_test)
+      
+      ph_plot <- ggcoxzph(ph_test, point.col = "steelblue", point.size = 1.5, point.alpha = 0.5) 
+      
+      # Save 
+      png(appArtifactPath("schoenfeld_residuals.png"), 
+          width  = 8, 
+          height = 3 * length(covariates), 
+          units  = "in",
+          res    = 300)
+      print(ph_plot)
+      dev.off()
+      
+    } else {
+      # Firth's Cox: coxph_for_survfit is a coxph object frozen at Firth's coefficients
+      logger.info("PH test is approximate — coefficients are from Firth's model but SE/residuals from coxph")
+      ph_test <- cox.zph(coxph_for_survfit)
+      print(ph_test)
+      
+      ph_plots <- suppressWarnings(ggcoxzph(ph_test, point.col = "steelblue", 
+                                            point.size  = 1.5, point.alpha = 0.5))
+      
+      # Add caption to each plot in the list
+      ph_plots <- lapply(ph_plots, function(p) {
+        p + 
+          labs(caption = "Note: Schoenfeld residuals are approximate — model fit via Firth's penalized Cox.") +
+          theme(plot.caption = element_text(color = "grey40", size = 8))
+      })
+      ph_combined <- wrap_plots(ph_plots, ncol = 1)
+      
+      # Save
+      png(appArtifactPath("schoenfeld_residuals.png"), 
+          width  = 8, 
+          height = 3 * length(covariates), 
+          units  = "in",
+          res    = 300)
+      print(ph_combined)
+      dev.off()
+    }
   }
+
   
-  
+  FIGURE OUT HOW THIS DIFFERS FROM OTHER FOREST PLOT, WHETHER SHOULD BE NESTED
   ## Plot forest plot of hazard ratios --- 
   forest_plot <- ggplot(cox.tab, aes(x = estimate, y = term)) +
     geom_point(size = 3) +

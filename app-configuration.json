@@ -17,5 +17,8 @@
    "survival_yr_start"             : null,
    "animal_birth_hatch_year_table" : null, 
    "life_table_days"               : 30, 
-   "calc_month_mort"               : true
+   "calc_month_mort"               : true, 
+   "calc_tracking_history"         : true,
+   "calc_residuals"                : true,
+   "calc_artifacts_at_mean"        : true
 }

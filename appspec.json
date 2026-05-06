@@ -142,32 +142,10 @@
     },
     {
       "id": "cox_covariate_1",
-      "name": "Covariate for CoxPH modelling",
-      "description": "Identify the covariate variable for grouping. Note that `survival year` and `life stage` require entry of additional and/or auxiliary data.",
-      "defaultValue": "sex",
-      "type": "DROPDOWN",
-      "options": [
-        {
-          "value": "sex",
-          "displayText": "Compare across sexes (m/f/u)"
-        }, 
-        {
-          "value": "lifestage",
-          "displayText": "Compare across life-stages (user-defined)"
-        }, 
-        {
-          "value": "survival_year",
-          "displayText": "Compare across survival years (user-defined)"
-        },
-        {
-          "value": "attachment_type",
-          "displayText": "Compare across attachment types (user-defined)"
-        },
-        {
-          "value": "model",
-          "displayText": "Compare across tag models (user-defined)"
-        }
-      ]
+      "name": "Covariate for Cox Proportional Hazard modelling",
+      "description": "Identify the covariate variable for grouping. Please enter the exact column name of your covariate of choice, or `survival_year` or `lifestage` for calculations based on user-defined variables (see below). Note that `survival year` and `life stage` require entry of additional and/or auxiliary data.",
+      "defaultValue": null,
+      "type": "STRING"
     }, 
     {
       "id": "cox_covariate_1_ref",
@@ -179,35 +157,9 @@
     {
       "id": "cox_covariate_2",
       "name": "Second covariate for CoxPH modelling",
-      "description": "Identify a second covariate variable for grouping. Note that `survival year` and `life stage` require entry of additional and/or auxiliary data.",
+      "description": "If required, identify a second covariate variable for grouping. Please enter the exact column name of your covariate of choice, or `survival_year` or `lifestage` for calculations based on user-defined variables (see below). Note that `survival year` and `life stage` require entry of additional and/or auxiliary data.",
       "defaultValue": null,
-      "type": "DROPDOWN",
-      "options": [
-        {
-          "value": null,
-          "displayText": "No further comparisons"
-        },
-        {
-          "value": "sex",
-          "displayText": "Compare across sexes (m/f/u)"
-        }, 
-        {
-          "value": "lifestage",
-          "displayText": "Compare across life-stages (user-defined)"
-        }, 
-        {
-          "value": "survival_year",
-          "displayText": "Compare across survival years (user-defined)"
-        },
-        {
-          "value": "attachment_type",
-          "displayText": "Compare across attachment types (user-defined)"
-        },
-        {
-          "value": "model",
-          "displayText": "Compare across tag models (user-defined)"
-        }
-      ]
+      "type": "STRING"
     }, 
     {
       "id": "cox_covariate_2_ref",
@@ -219,35 +171,9 @@
     {
       "id": "cox_covariate_3",
        "name": "Third covariate for CoxPH modelling",
-      "description": "Identify a third covariate variable for grouping. Note that `survival year` and `life stage` require entry of additional and/or auxiliary data.",
+      "description": "If required, identify a third covariate variable for grouping. NPlease enter the exact column name of your covariate of choice, or `survival_year` or `lifestage` for calculations based on user-defined variables (see below). Note that `survival year` and `life stage` require entry of additional and/or auxiliary data.",
       "defaultValue": null,
-      "type": "DROPDOWN",
-      "options": [
-        {
-          "value": null,
-          "displayText": "No further comparisons"
-        },
-        {
-          "value": "sex",
-          "displayText": "Compare across sexes (m/f/u)"
-        }, 
-        {
-          "value": "lifestage",
-          "displayText": "Compare across life-stages (user-defined)"
-        }, 
-        {
-          "value": "survival_year",
-          "displayText": "Compare across survival years (user-defined)"
-        },
-        {
-          "value": "attachment_type",
-          "displayText": "Compare across attachment types (user-defined)"
-        },
-        {
-          "value": "model",
-          "displayText": "Compare across tag models (user-defined)"
-        }
-      ]
+      "type": "STRING"
     }, 
     {
       "id": "cox_covariate_3_ref",
@@ -277,22 +203,33 @@
       "type": "INTEGER"
     }, 
     {
+      "id": "calc_tracking_history",
+      "name": "Plot tracking history",
+      "description": "If selected, the app will generate a plot detail each individual's tracking duration .", 
+      "defaultValue": true,
+      "type": "CHECKBOX"
+    }, 
+    {
       "id": "calc_month_mort",
       "name": "Plot monthly mortality",
-      "description": "Select an option.",
-      "defaultValue": false,
-      "type": "RADIOBUTTONS",
-      "options": [
-        {
-        "value": false,
-        "displayText": "Do not plot monthly mortality"
-        },
-        {
-          "value": true,
-          "displayText": "Plot monthly mortality"
-        }
-        ]
-      }
+      "description": "If selected, the app will generate a summary plot of monthly mortality across the study period.", 
+      "defaultValue": true,
+      "type": "CHECKBOX"
+    }, 
+    {
+      "id": "calc_residuals",
+      "name": "Generate diagnostic residual plots",
+      "description": "If selected, the app will generate a diagnostic plot of Schoenfeld residual.",
+      "defaultValue": true,
+      "type": "CHECKBOX"
+    }, 
+    {
+      "id": "calc_artifacts_at_mean",
+      "name": "Generate mean artifacts",
+      "description": "If selected, the app will produce statistics, survival plot, cumulative hazard plot, and forest plot of survival with covariates held at their mean values.", .... 
+      "defaultValue": true,
+      "type": "CHECKBOX"
+    }
   ],
   "dependencies": {
     "R": [

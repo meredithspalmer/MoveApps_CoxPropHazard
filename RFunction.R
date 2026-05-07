@@ -426,98 +426,101 @@ rFunction = function(data,
   # Death comments to flag
   positive_pattern <- "dead|death|died|cod|predation|predator|vehicle|collision|killed|poach|poached|shot|hunt|harvest|harvested|mortality"
   
-  # Search in data
+  # Check which columns are present 
+  has_death_comments          <- "death_comments"          %in% names(summary_table)
+  has_deployment_end_comments <- "deployment_end_comments" %in% names(summary_table)
+  has_deployment_end_type     <- "deployment_end_type"     %in% names(summary_table)
+  has_mortality_type          <- "mortality_type"          %in% names(summary_table)
+  has_mortality_location      <- "mortality_location_filled" %in% names(summary_table)
+  
+  # Construct mortality event
   summary_table <- summary_table %>%
     
-    # Initialize mortality event
+    # Initialise mortality event
     mutate(mortality_event = NA_real_) %>%
     
     # Identify survivors (individuals who last beyond study)
     mutate(survived_beyond_study = !is.na(raw_deploy_off_timestamp) &
              raw_deploy_off_timestamp > as.Date(effective_end),
-           mortality_event = if_else(survived_beyond_study, 0L, mortality_event),
-           
-           # Update columns to remove ambiguity (e.g., if animal dies after study window)
-           death_comments = if ("death_comments" %in% names(.)) {
-             if_else(survived_beyond_study, "survived beyond study", death_comments)
-           } else death_comments,
-           
-           deployment_end_comments = if ("deployment_end_comments" %in% names(.)) {
-             if_else(survived_beyond_study, "survived beyond study", deployment_end_comments)
-           } else deployment_end_comments,
-           
-           deployment_end_type = if ("deployment_end_type" %in% names(.)) {
-             if_else(survived_beyond_study, "survived beyond study", deployment_end_type)
-           } else deployment_end_type,
-           
-           mortality_location_filled = if ("mortality_location_filled" %in% names(.)) {
-             if_else(survived_beyond_study, 0L, mortality_location_filled)
-           } else mortality_location_filled) %>%
+           mortality_event = if_else(survived_beyond_study, 0L, mortality_event)) %>%
     
-    # Search for mortality indicators
-    # A. "death_comments" keywords
-    mutate(mortality_event = case_when(
-      "death_comments" %in% names(.) & str_detect(tolower(death_comments), "\\bnot\\b") ~ 0L,
-      "death_comments" %in% names(.) & str_detect(tolower(death_comments), positive_pattern) ~ 1L,
-      mortality_event == 1L ~ 1L,
-      TRUE ~ mortality_event)) %>%
+    # Update optional columns to remove ambiguity for survivors
+    { if (has_death_comments)
+      mutate(., death_comments = if_else(survived_beyond_study, "survived beyond study", death_comments))
+      else . } %>%
+    { if (has_deployment_end_comments)
+      mutate(., deployment_end_comments = if_else(survived_beyond_study, "survived beyond study", deployment_end_comments))
+      else . } %>%
+    { if (has_deployment_end_type)
+      mutate(., deployment_end_type = if_else(survived_beyond_study, "survived beyond study", deployment_end_type))
+      else . } %>%
+    { if (has_mortality_location)
+      mutate(., mortality_location_filled = if_else(survived_beyond_study, 0L, mortality_location_filled))
+      else . } %>%
     
-    # B: "deployment_end_comments" contains mortality keywords  
-    mutate(mortality_event = case_when(
-      mortality_event == 1L ~ 1L,  
-      "deployment_end_comments" %in% names(.) &
+    # A. death_comments keywords
+    { if (has_death_comments)
+      mutate(., mortality_event = case_when(
+        str_detect(tolower(death_comments), "\\bnot\\b")      ~ 0L,
+        str_detect(tolower(death_comments), positive_pattern) ~ 1L,
+        mortality_event == 1L                                  ~ 1L,
+        TRUE                                                   ~ mortality_event))
+      else . } %>%
+    
+    # B. deployment_end_comments keywords
+    { if (has_deployment_end_comments)
+      mutate(., mortality_event = case_when(
+        mortality_event == 1L ~ 1L,
         str_detect(tolower(deployment_end_comments), positive_pattern) ~ 1L,
-      TRUE ~ mortality_event)) %>%
+        TRUE ~ mortality_event))
+      else . } %>%
     
-    # C: "mortality_type" is filled (non-NA) 
-    mutate(mortality_event = case_when(
-      mortality_event == 1L ~ 1L,   
-      "mortality_type" %in% names(.) &
+    # C. mortality_type is filled (non-NA)
+    { if (has_mortality_type)
+      mutate(., mortality_event = case_when(
+        mortality_event == 1L  ~ 1L,
         !is.na(mortality_type) ~ 1L,
-      TRUE ~ mortality_event)) %>%
+        TRUE                   ~ mortality_event))
+      else . } %>%
     
-    # D. "mortality_location_filled" is filled 
-    mutate(mortality_event = case_when(
-      "mortality_location_filled" %in% names(.) &
+    # D. mortality_location_filled
+    { if (has_mortality_location)
+      mutate(., mortality_event = case_when(
         mortality_location_filled >= 1 ~ 1L,
-      mortality_event == 1L ~ 1L,
-      TRUE ~ mortality_event)) %>%
+        mortality_event == 1L          ~ 1L,
+        TRUE                           ~ mortality_event))
+      else . } %>%
     
-    # E. "deployment_end_type" indicates censoring vs. death 
-    mutate(mortality_event = case_when(
-      mortality_event == 1L ~ 1L,
-      
-      # Mortality indication
-      "deployment_end_type" %in% names(.) &
-        str_detect(tolower(deployment_end_type), "\\bdead\\b|\\bdeath\\b") ~ 1L,
-      
-      # Censoring indication
-      "deployment_end_type" %in% names(.) &
-        tolower(deployment_end_type) %in% c("removal", "other", "unknown", "survived beyond study") ~ 0L,
-      
-      # Missing column OR NA value → censored
-      (!"deployment_end_type" %in% names(.) | is.na(deployment_end_type)) &
-        is.na(mortality_event) ~ 0L,
-      TRUE ~ mortality_event)) %>%
+    # E. deployment_end_type
+    { if (has_deployment_end_type)
+      mutate(., mortality_event = case_when(
+        mortality_event == 1L ~ 1L,
+        str_detect(tolower(deployment_end_type), "\\bdead\\b|\\bdeath\\b")           ~ 1L,
+        tolower(deployment_end_type) %in%
+          c("removal", "other", "unknown", "survived beyond study")                  ~ 0L,
+        is.na(deployment_end_type) & is.na(mortality_event)                          ~ 0L,
+        TRUE                                                                         ~ mortality_event))
+      else
+        mutate(., mortality_event = if_else(is.na(mortality_event), 0L, mortality_event))
+    } %>%
     
-    # Final censoring: remaining NA → 0 (only if we have "deploy_off_timestamp")
+    # Final censoring: remaining NA → 0 if deploy_off_timestamp is present
     mutate(mortality_event = if_else(
       is.na(mortality_event) & !is.na(deploy_off_timestamp),
       0L,
       mortality_event)) %>%
     
-    # Clean data frame  
-    select(-survived_beyond_study) %>%
-    relocate(mortality_event, .after = deployment_end_type)
+    select(-survived_beyond_study) |>
+    relocate(mortality_event, .after = any_of("deployment_end_type"))
   
-  # Error out: No deaths 
-  n_mort_events <- sum(summary_table$mortality_event == 1, na.rm = TRUE)
+  # Error out: no deaths
+  n_mort_events <- sum(summary_table$mortality_event == 1L, na.rm = TRUE)
   if (n_mort_events == 0) {
-    logger.fatal("Cannot run survival analysis: no mortality events detected.",
+    logger.fatal("Cannot run survival analysis: no mortality events detected.", 
                  call. = FALSE, immediate. = TRUE)
   }
   
-  # Produce warning: Small proportion of deaths 
+  # Warning: few deaths
   if (n_mort_events <= 10) {
     logger.warn(sprintf("Few (%d) deaths detected across entire dataset. Particularly if data is further subset, model may have low statistical power. This could potentially result in unreliable estimates and poor predictive capacity", n_mort_events), call. = FALSE, immediate. = TRUE)
   }
@@ -525,152 +528,191 @@ rFunction = function(data,
   
   ## Calculate survival years (if selected) -----------------------------------
   
-  if(!is.null(survival_yr_start)){
+  if (!is.null(survival_yr_start)) {
     
-    # Extract survival year start date 
+    # Survival year start 
     start_month <- month(survival_yr_start)
-    start_day   <- mday(survival_yr_start)     
+    start_day   <- mday(survival_yr_start)
     
-    # Function to handle invalid dates (e.g., Feb 29 in non-leap years)
+    # Handle invalid dates (e.g. Feb 29 in non-leap years)
     safe_make_date <- function(year, month, day) {
       date <- suppressWarnings(make_date(year, month, day))
       if (is.na(date)) {
-        ym <- ymd(sprintf("%d-%02d-01", year, month)) %m-% months(1)
+        ym   <- ymd(sprintf("%d-%02d-01", year, month)) %m-% months(1)
         date <- ceiling_date(ym, "month") - days(1)
       }
       date
     }
     
-    # Function to assign survival year and period boundaries 
+    # Return survival year and period boundaries for a given date
     get_survival_period <- function(date) {
-      if (is.na(date)) return(tibble(survival_year = NA_integer_, period_start = NA_Date_, 
-                                     period_end = NA_Date_))
-      y <- year(date)
-      period_start_this_year <- safe_make_date(y, start_month, start_day)
+      if (is.na(date)) return(tibble(survival_year = NA_integer_,
+                                     period_start  = NA_Date_,
+                                     period_end    = NA_Date_))
+      y                    <- year(date)
+      period_start_this_yr <- safe_make_date(y, start_month, start_day)
       
-      if (date >= period_start_this_year) {
+      if (date >= period_start_this_yr) {
         survival_year <- y
-        period_start  <- period_start_this_year
+        period_start  <- period_start_this_yr
         period_end    <- safe_make_date(y + 1, start_month, start_day) - days(1)
       } else {
         survival_year <- y - 1
         period_start  <- safe_make_date(y - 1, start_month, start_day)
-        period_end    <- safe_make_date(y, start_month, start_day) - days(1)
+        period_end    <- safe_make_date(y,     start_month, start_day) - days(1)
       }
-      
       tibble(survival_year = survival_year,
              period_start  = period_start,
              period_end    = period_end)
     }
     
-    # Vectorized helpers
-    get_survival_year  <- function(date) get_survival_period(date)$survival_year
+    get_survival_year <- function(date) get_survival_period(date)$survival_year
     
-    # Determine range of survival years present in the data 
+    # Determine survival year range
     date_range <- events_with_ind %>%
       summarise(min_ts = min(timestamp, na.rm = TRUE),
                 max_ts = max(timestamp, na.rm = TRUE))
-    min_year <- get_survival_year(date_range$min_ts)
-    max_year <- get_survival_year(date_range$max_ts)
+    
+    min_year       <- get_survival_year(date_range$min_ts)
+    max_year       <- get_survival_year(date_range$max_ts)
     possible_years <- seq(min_year, max_year, by = 1)
+    
     logger.info(sprintf("Survival years found in data: %d to %d (%d years total)",
                         min_year, max_year, length(possible_years)))
     
-    # Create all possible survival periods
     possible_periods <- tibble(survival_year = possible_years) %>%
       mutate(period_info = map(survival_year, ~ {
-        start <- safe_make_date(.x, start_month, start_day)
+        start <- safe_make_date(.x,     start_month, start_day)
         end   <- safe_make_date(.x + 1, start_month, start_day) - days(1)
         tibble(period_start = start, period_end = end)
       })) %>%
       unnest(period_info)
     
-    # Create individual-year rows 
+    # Infer which columns to carry into yearly_survival
+    
+    # Pre-check optional columns
+    has_mortality_date          <- "mortality_date"          %in% names(summary_table)
+    has_mortality_type          <- "mortality_type"          %in% names(summary_table)
+    has_death_comments          <- "death_comments"          %in% names(summary_table)
+    has_deployment_end_comments <- "deployment_end_comments" %in% names(summary_table)
+    has_deployment_end_type     <- "deployment_end_type"     %in% names(summary_table)
+    
+    # Exclude join keys and period-specific columns that are recalculated per year
+    cols_exclude_from_carry <- c(
+      # Join keys
+      "individual_id", "individual_local_identifier",
+      # Recalculated per survival year
+      "entry_time_days", "exit_time_days",
+      "analysis_entry_date", "analysis_exit_date",
+      # Raw timestamps kept separately — clipped versions used in yearly output
+      "raw_deploy_on_timestamp", "raw_deploy_off_timestamp"
+    )
+    
+    carry_cols <- setdiff(names(summary_table), cols_exclude_from_carry)
+    logger.info(paste("Columns carried into yearly_survival:", paste(carry_cols, collapse = ", ")))
+    
+    # Infer individual-level constants by checking n_distinct per individual
+    static_cols <- summary_table %>%
+      dplyr::select(individual_id, all_of(carry_cols)) %>%
+      group_by(individual_id) %>%
+      summarise(across(everything(), n_distinct), .groups = "drop") %>%
+      dplyr::select(-individual_id) %>%
+      summarise(across(everything(), max)) %>%
+      pivot_longer(everything(), names_to = "col", values_to = "n_distinct") %>%
+      filter(n_distinct == 1) %>%
+      pull(col)
+    
+    logger.info(paste("Individual-level constant columns (used for crossing):",
+                      paste(static_cols, collapse = ", ")))
+    
+    # Build individual × year table
     yearly_survival <- summary_table %>%
       
-      # Keep only static/animal-level info for crossing
-      dplyr::select(individual_id,
-                    individual_local_identifier,
-                    any_of(c("sex",
-                             "animal_birth_hatch_year",
-                             "attachment_type",
-                             "model"))) %>% 
-      distinct() %>% 
-      
-      # Cross with all possible survival years
+      # Cross individual-level constants with all possible survival periods
+      dplyr::select(individual_id, individual_local_identifier,
+                    any_of(static_cols)) %>%
+      distinct() %>%
       crossing(possible_periods) %>%
       
-      # Bring back deployment & mortality info
-      left_join(summary_table %>%
-                  dplyr::select(individual_id, 
-                                individual_local_identifier, 
-                                deploy_on_timestamp, 
-                                deploy_off_timestamp, 
-                                any_of(c("mortality_date", 
-                                         "mortality_type", 
-                                         "death_comments", 
-                                         "deployment_end_comments", 
-                                         "deployment_end_type", 
-                                         "mortality_event", 
-                                         "first_timestamp", "last_timestamp", 
-                                         "n_locations", "n_deployments"))), 
-                by = c("individual_id", "individual_local_identifier")) %>%
+      # Join back all remaining carry columns
+      left_join(
+        summary_table %>%
+          dplyr::select(individual_id, individual_local_identifier,
+                        all_of(setdiff(carry_cols, static_cols))),
+        by = c("individual_id", "individual_local_identifier")
+      ) %>%
       
       # Clip monitoring interval to the survival period
-      mutate(monitor_start = pmax(deploy_on_timestamp,  period_start, na.rm = TRUE),
-             monitor_end   = pmin(deploy_off_timestamp, period_end,   na.rm = TRUE),
-             
-             # Keep only periods where animal was monitored
-             active_in_period = monitor_start <= monitor_end & !is.na(monitor_start) & 
-               !is.na(monitor_end)) %>%
+      mutate(
+        monitor_start    = pmax(deploy_on_timestamp, period_start, na.rm = TRUE),
+        monitor_end      = pmin(deploy_off_timestamp, period_end,  na.rm = TRUE),
+        active_in_period = monitor_start <= monitor_end &
+          !is.na(monitor_start) & !is.na(monitor_end)
+      ) %>%
       filter(active_in_period) %>%
       
-      # Final entry / exit dates for this animal-year
-      mutate(entry_date = monitor_start,
-             exit_date  = monitor_end,
-             
-             # Did mortality occur **inside** this survival year?
-             died_this_year = case_when(
-               
-               # Priority 1: mortality_date exists and is inside the period
-               mortality_event == 1L &
-                 !is.na(mortality_date) &
-                 mortality_date >= period_start &
-                 mortality_date <= period_end
-               ~ TRUE,
-               
-               # Priority 2: mortality_date is NA, but mortality_event == 1 AND deploy_off inside period
-               mortality_event == 1L &
-                 is.na(mortality_date) &
-                 !is.na(deploy_off_timestamp) &
-                 deploy_off_timestamp >= period_start &
-                 deploy_off_timestamp <= period_end
-               ~ TRUE,
-               
-               # Otherwise: no death this year
-               TRUE ~ FALSE),
-             
-             # Final flags
-             mortality_event = as.integer(died_this_year),
-             censored        = as.integer(!died_this_year),
-             
-             # Reported mortality date: prefer original mortality_date, fall back to deploy_off
-             mortality_date_reported = case_when(
-               died_this_year & !is.na(mortality_date) ~ as.Date(mortality_date),
-               died_this_year &  is.na(mortality_date) ~ as.Date(deploy_off_timestamp),
-               TRUE                                    ~ NA_Date_),
-             
-             # Carry mortality metadata only when we flag a death
-             mortality_type          = if_else(died_this_year, mortality_type,          NA_character_),
-             death_comments          = if_else(died_this_year, death_comments,          NA_character_),
-             deployment_end_comments = if_else(died_this_year, deployment_end_comments, NA_character_),
-             deployment_end_type     = if_else(died_this_year, deployment_end_type,     NA_character_),
-             
-             # Days monitored in this survival year
-             days_at_risk = as.integer(exit_date - entry_date) + 1L) %>%
+      # Inject NA columns for any optional mortality columns that are absent,
+      # so that case_when() can reference them without erroring
+      { if (!has_mortality_date)          mutate(., mortality_date          = NA_Date_)     else . } %>%
+      { if (!has_mortality_type)          mutate(., mortality_type          = NA_character_) else . } %>%
+      { if (!has_death_comments)          mutate(., death_comments          = NA_character_) else . } %>%
+      { if (!has_deployment_end_comments) mutate(., deployment_end_comments = NA_character_) else . } %>%
+      { if (!has_deployment_end_type)     mutate(., deployment_end_type     = NA_character_) else . } %>%
       
-      # Final cleaning
+      # Mortality flags per survival year
+      mutate(
+        entry_date = monitor_start,
+        exit_date  = monitor_end,
+        
+        # Did mortality occur inside this survival year?
+        # Priority 1: mortality_date present and inside the period
+        # Priority 2: mortality_date absent or NA — fall back to deploy_off_timestamp
+        died_this_year = case_when(
+          mortality_event == 1L &
+            !is.na(mortality_date) &
+            mortality_date >= period_start &
+            mortality_date <= period_end
+          ~ TRUE,
+          
+          mortality_event == 1L &
+            is.na(mortality_date) &
+            !is.na(deploy_off_timestamp) &
+            deploy_off_timestamp >= period_start &
+            deploy_off_timestamp <= period_end
+          ~ TRUE,
+          
+          TRUE ~ FALSE),
+        
+        mortality_event = as.integer(died_this_year),
+        censored        = as.integer(!died_this_year),
+        
+        # Reported mortality date: prefer mortality_date if present, else deploy_off
+        mortality_date_reported = case_when(
+          died_this_year & !is.na(mortality_date) ~ as.Date(mortality_date),
+          died_this_year                           ~ as.Date(deploy_off_timestamp),
+          TRUE                                     ~ NA_Date_),
+        
+        # Carry mortality metadata only when flagging a death
+        mortality_type          = if_else(died_this_year, mortality_type,          NA_character_),
+        death_comments          = if_else(died_this_year, death_comments,          NA_character_),
+        deployment_end_comments = if_else(died_this_year, deployment_end_comments, NA_character_),
+        deployment_end_type     = if_else(died_this_year, deployment_end_type,     NA_character_),
+        
+        days_at_risk = as.integer(exit_date - entry_date) + 1L
+      ) %>%
+      
+      select(-active_in_period, -monitor_start, -monitor_end, -died_this_year) %>%
+      
+      # Calculate per-year entry/exit time in days (relative to each period_start)
+      mutate(
+        analysis_entry_date = entry_date,
+        analysis_exit_date  = exit_date,
+        entry_time_days     = as.numeric(difftime(entry_date, period_start, units = "days")),
+        exit_time_days      = as.numeric(difftime(exit_date,  period_start, units = "days"))
+      ) %>%
+      
       arrange(individual_id, survival_year)
+    
   } else {
     logger.info("Survival years not calculated.")
   }
@@ -813,18 +855,18 @@ rFunction = function(data,
   
   # Comparison covariate 1 --- 
   if(!is.null(cox_covariate_1)) {
-    warning(paste("Comparing across", cox_covariate_1, "..."))
+    logger.info(paste("Comparing across", cox_covariate_1, "..."))
     
     if(is.null(survival_yr_start)){
-      warning("... with summary table")
+      logger.info("... with summary table")
       
       non_na_unique <- unique(na.omit(summary_table[[cox_covariate_1]]))
       
       if (length(non_na_unique) <= 1) {
         if (length(non_na_unique) == 0) {
-          warning(paste0("Warning: The grouping variable, ", cox_covariate_1, ", is entirely NA; no comparison is possible."))
+          logger.fatal(paste0("Warning: The grouping variable, ", cox_covariate_1, ", is entirely NA; no comparison is possible."))
         } else {
-          warning(paste0("Warning: There is only one non-NA comparison covariate in ", cox_covariate_1, "; no comparison is possible."))
+          logger.fatal(paste0("Warning: There is only one non-NA comparison covariate in ", cox_covariate_1, "; no comparison is possible."))
         }
         cox_covariate_1 <- NULL
       }
@@ -837,24 +879,24 @@ rFunction = function(data,
         unique_values <- sort(unique(summary_table[[cox_covariate_1]]))
         n_values      <- length(unique_values)
         
-        warning(sprintf("%d values of comparison covariate detected after cleaning: %s", n_values, paste(unique_values, collapse = ", ")))
+        logger.info(sprintf("%d values of comparison covariate detected after cleaning: %s", n_values, paste(unique_values, collapse = ", ")))
         
         n_lost <- n_original - nrow(summary_table)
         if (n_lost > 0) {
-          warning(sprintf("%d individuals with NA covariate value removed from study.", n_lost))
+          logger.info(sprintf("%d individuals with NA covariate value removed from study.", n_lost))
         }
       }
       
     } else {
-      warning("... with yearly survival")
+      logger.info("... with yearly survival")
       
       non_na_unique <- unique(na.omit(yearly_survival[[cox_covariate_1]]))
       
       if (length(non_na_unique) <= 1) {
         if (length(non_na_unique) == 0) {
-          warning(paste0("Warning: The grouping variable, ", cox_covariate_1, ", is entirely NA; no comparison is possible."))
+          logger.fatal(paste0("Warning: The grouping variable, ", cox_covariate_1, ", is entirely NA; no comparison is possible."))
         } else {
-          warning(paste0("Warning: There is only one non-NA comparison covariate in ", cox_covariate_1, "; no comparison is possible."))
+          logger.fatal(paste0("Warning: There is only one non-NA comparison covariate in ", cox_covariate_1, "; no comparison is possible."))
         }
         cox_covariate_1 <- NULL
       }
@@ -867,11 +909,11 @@ rFunction = function(data,
         unique_values <- sort(unique(yearly_survival[[cox_covariate_1]]))
         n_values      <- length(unique_values)
         
-        warning(sprintf("%d values of comparison covariate detected after cleaning: %s", n_values, paste(unique_values, collapse = ", ")))
+        logger.info(sprintf("%d values of comparison covariate detected after cleaning: %s", n_values, paste(unique_values, collapse = ", ")))
         
         n_lost <- n_original - nrow(yearly_survival)
         if (n_lost > 0) {
-          warning(sprintf("%d individuals with NA covariate value removed from study.", n_lost))
+          logger.info(sprintf("%d individuals with NA covariate value removed from study.", n_lost))
         }
       }
     }
@@ -1193,12 +1235,14 @@ rFunction = function(data,
       max_date <- max(summary_table$deploy_off_timestamp, na.rm = TRUE)
       full_years <- seq(year(min_date), year(max_date), by = 1)
       
-      mortality_data <- summary_table %>%
-        filter(mortality_event == 1) %>%
-        mutate(death_date   = as.Date(deploy_off_timestamp),
-               death_year   = year(death_date),
-               death_month  = month(death_date, label = TRUE, abbr = TRUE),
-               death_month  = factor(death_month, levels = month.abb, ordered = TRUE)) %>%
+      mortality_data <- summary_table |>
+        filter(mortality_event == 1) |>
+        mutate(mort_date   = as.Date(mortality_date),
+               deploy_off  = as.Date(deploy_off_timestamp),
+               death_date  = coalesce(mort_date, deploy_off),
+               death_year  = year(death_date),
+               death_month = month(death_date, label = TRUE, abbr = TRUE),
+               death_month = factor(death_month, levels = month.abb, ordered = TRUE)) |>
         dplyr::select(death_year, death_month)
       
       monthly_morts <- mortality_data %>%
@@ -1254,7 +1298,7 @@ rFunction = function(data,
       full_years <- seq(year(min_date), year(max_date), by = 1)
       
       mortality_data <- yearly_survival |>
-        filter(mortality_event == 1 | died_this_year == TRUE) |>
+        filter(mortality_event == 1) |>
         mutate(mort_date   = as.Date(mortality_date),
                deploy_off  = as.Date(deploy_off_timestamp),
                death_date  = coalesce(mort_date, deploy_off),
@@ -1371,9 +1415,9 @@ rFunction = function(data,
     coef_names <- names(coxphf_fit$coefficients)
     cox.tab <- data.frame(
       term      = coef_names,
-      estimate  = exp(coxphf_fit$coefficients[coef_names]),
-      conf.low  = exp(coxphf_fit$ci.lower[coef_names]),
-      conf.high = exp(coxphf_fit$ci.upper[coef_names]),
+      estimate  = exp(coxphf_fit$coefficients[coef_names]),  
+      conf.low  = coxphf_fit$ci.lower[coef_names], # already exponentiated           
+      conf.high = coxphf_fit$ci.upper[coef_names],# already exponentiated           
       p.value   = coxphf_fit$prob[coef_names],
       row.names = NULL
     )
@@ -1497,8 +1541,7 @@ rFunction = function(data,
     }
   }
 
-  
-  FIGURE OUT HOW THIS DIFFERS FROM OTHER FOREST PLOT, WHETHER
+
   ## Plot forest plot of hazard ratios --- 
   forest_plot <- ggplot(cox.tab, aes(x = estimate, y = term)) +
     geom_point(size = 3) +
@@ -1529,13 +1572,122 @@ rFunction = function(data,
     list(var = cox_covariate_3, ref = cox_covariate_3_ref)
   )
   active_covariates <- Filter(function(x) !is.null(x$var), active_covariates)
-  
   fitting_data <- if (is.null(survival_yr_start)) summary_table else yearly_survival
   
   for (cov_item in active_covariates) {
+    
     cov <- cov_item$var
     ref <- cov_item$ref
     logger.info(paste("Producing group comparison outputs for:", cov))
+    
+    # Detect whether covariate is continuous
+    is_continuous <- is.numeric(fitting_data[[cov]]) || 
+      inherits(fitting_data[[cov]], "units")
+    
+    # Build formula  
+    km_formula <- as.formula(paste("Surv(entry_time_days, exit_time_days, mortality_event) ~", cov))
+    
+    
+    ## For continuous covariates ---
+    if (is_continuous) {
+      logger.info(paste(cov, "is continuous — running Cox model only."))
+      
+      # Strip units if present 
+      if (inherits(fitting_data[[cov]], "units")) {
+        fitting_data[[cov]] <- as.numeric(fitting_data[[cov]])
+      }
+      
+      ## Cox model tests (LR, Wald, Score) ---
+      separation_detected <- FALSE
+      
+      cox_strat_fit <- withCallingHandlers(
+        coxph(km_formula, data = fitting_data),
+        warning = function(w) {
+          if (grepl("Loglik converged before variable", conditionMessage(w))) {
+            separation_detected <<- TRUE
+            invokeRestart("muffleWarning")
+          }
+        }
+      )
+      
+      if (separation_detected) {
+        logger.warn(sprintf(
+          "Separation detected for %s — falling back to Firth's penalized Cox for HR estimates.", cov))
+        cox_strat_firth <- coxphf(km_formula, data = fitting_data, maxstep = 0.1, maxit = 200)
+      }
+      
+      cox_summary <- summary(cox_strat_fit)
+      
+      test_results <- data.frame(
+        covariate = cov,
+        test      = c("Likelihood Ratio", "Wald", "Score"),
+        chi_sq    = round(c(cox_summary$logtest["test"],
+                            cox_summary$waldtest["test"],
+                            cox_summary$sctest["test"]), 3),
+        df        = c(cox_summary$logtest["df"],
+                      cox_summary$waldtest["df"],
+                      cox_summary$sctest["df"]),
+        p_value   = round(c(cox_summary$logtest["pvalue"],
+                            cox_summary$waldtest["pvalue"],
+                            cox_summary$sctest["pvalue"]), 4),
+        note      = ifelse(separation_detected,
+                           "Separation detected — HR estimates from Firth's model",
+                           "Standard Cox"))
+      
+      write.csv(test_results,
+                file      = appArtifactPath(paste0("model_tests_", cov, ".csv")),
+                row.names = FALSE)
+      
+      ## HR table ---
+      if (separation_detected) {
+        cox_strat_tab <- data.frame(
+          term      = names(cox_strat_firth$coefficients),
+          estimate  = exp(cox_strat_firth$coefficients),
+          conf.low  = cox_strat_firth$ci.lower,
+          conf.high = cox_strat_firth$ci.upper,
+          p.value   = cox_strat_firth$prob,
+          covariate = cov,
+          row.names = NULL
+        )
+      } else {
+        cox_strat_tab <- tidy(cox_strat_fit, exponentiate = TRUE, conf.int = TRUE) %>%
+          mutate(covariate = cov)
+      }
+      
+      write.csv(cox_strat_tab,
+                file      = appArtifactPath(paste0("cox_hr_", cov, ".csv")),
+                row.names = FALSE)
+      
+      ## Forest plot ---
+      forest_strat <- ggplot(cox_strat_tab, aes(x = estimate, y = term)) +
+        geom_vline(xintercept = 1, linetype = "dashed", color = "grey50") +
+        geom_errorbarh(aes(xmin = conf.low, xmax = conf.high),
+                       height = 0.25, linewidth = 0.8, color = "grey30") +
+        geom_point(aes(color = p.value < 0.05), size = 3.5) +
+        scale_color_manual(values = c("TRUE" = "#D62728", "FALSE" = "#1F77B4"),
+                           labels = c("TRUE" = "p < 0.05", "FALSE" = "p ≥ 0.05"),
+                           name   = NULL) +
+        scale_x_log10(labels = number_format(accuracy = 0.01)) +
+        labs(title    = paste("Hazard Ratio —", cov),
+             subtitle = sprintf("Cox LR test: chi-sq=%.3f, p=%.4f",
+                                test_results$chi_sq[1], test_results$p_value[1]),
+             x        = "Hazard Ratio (log scale)",
+             y        = NULL) +
+        theme_classic(base_size = 12) +
+        theme(plot.title      = element_text(face = "bold"),
+              plot.subtitle   = element_text(size = 10, color = "grey40"),
+              legend.position = "top")
+      
+      png(appArtifactPath(paste0("forest_", cov, ".png")),
+          width = 7, height = 3, units = "in", res = 300)
+      print(forest_strat)
+      dev.off()
+      
+      next
+    }
+    
+    
+    ## For categorical covariates ---
     
     # Apply reference level if specified
     if (!is.null(ref) && ref %in% unique(fitting_data[[cov]])) {
@@ -1547,12 +1699,27 @@ rFunction = function(data,
     n_groups <- length(levels(fitting_data[[cov]]))
     pal      <- viridis(n_groups, option = "turbo", end = 0.9)
     
-    km_formula <- as.formula(paste("Surv(entry_time_days, exit_time_days, mortality_event) ~", cov))
     
+    ## Cox model tests (LR, Wald, Score) ---
+    separation_detected <- FALSE
     
-    ## Cox model tests (LR, Wald, Score) --- 
-    cox_strat_fit <- coxph(km_formula, data = fitting_data)
-    cox_summary   <- summary(cox_strat_fit)
+    cox_strat_fit <- withCallingHandlers(
+      coxph(km_formula, data = fitting_data),
+      warning = function(w) {
+        if (grepl("Loglik converged before variable", conditionMessage(w))) {
+          separation_detected <<- TRUE
+          invokeRestart("muffleWarning")
+        }
+      }
+    )
+    
+    if (separation_detected) {
+      logger.warn(sprintf(
+        "Separation detected for %s — falling back to Firth's penalized Cox for HR estimates.", cov))
+      cox_strat_firth <- coxphf(km_formula, data = fitting_data, maxstep = 0.1, maxit = 200)
+    }
+    
+    cox_summary <- summary(cox_strat_fit)
     
     test_results <- data.frame(
       covariate = cov,
@@ -1565,64 +1732,110 @@ rFunction = function(data,
                     cox_summary$sctest["df"]),
       p_value   = round(c(cox_summary$logtest["pvalue"],
                           cox_summary$waldtest["pvalue"],
-                          cox_summary$sctest["pvalue"]), 4))
+                          cox_summary$sctest["pvalue"]), 4),
+      note      = ifelse(separation_detected,
+                         "Separation detected — HR estimates from Firth's model",
+                         "Standard Cox"))
     
-    # LR p-value for plot subtitles
     lr_p <- test_results$p_value[1]
     
-    # Save 
     write.csv(test_results,
               file      = appArtifactPath(paste0("model_tests_", cov, ".csv")),
               row.names = FALSE)
-
+    
     
     ## Pairwise comparisons (if >2 groups) ---
     if (n_groups > 2) {
-      group_levels     <- levels(fitting_data[[cov]])
-      pairs            <- combn(group_levels, 2, simplify = FALSE)
+      group_levels <- levels(fitting_data[[cov]])
+      pairs        <- combn(group_levels, 2, simplify = FALSE)
       
       pairwise_results <- lapply(pairs, function(pair) {
         sub_data        <- fitting_data[fitting_data[[cov]] %in% pair, ]
         sub_data[[cov]] <- droplevels(sub_data[[cov]])
-        fit             <- coxph(km_formula, data = sub_data)
-        s               <- summary(fit)
-        data.frame(group_1 = pair[1],
-                   group_2 = pair[2],
-                   hr      = round(exp(coef(fit)[1]), 3),
-                   p_wald  = round(s$waldtest["pvalue"], 4))
+        
+        pair_separation <- FALSE
+        
+        fit <- withCallingHandlers(
+          coxph(km_formula, data = sub_data),
+          warning = function(w) {
+            if (grepl("Loglik converged before variable|did not converge", conditionMessage(w))) {
+              pair_separation <<- TRUE
+              invokeRestart("muffleWarning")
+            }
+          }
+        )
+        
+        if (pair_separation) {
+          firth_fit <- tryCatch(
+            coxphf(km_formula, data = sub_data, maxstep = 0.1, maxit = 200),
+            error = function(e) NULL
+          )
+          
+          if (!is.null(firth_fit)) {
+            return(data.frame(
+              group_1 = pair[1],
+              group_2 = pair[2],
+              hr      = round(exp(firth_fit$coefficients[1]), 3),
+              p_wald  = round(firth_fit$prob[1], 4),
+              method  = "Firth"))
+          } else {
+            return(data.frame(
+              group_1 = pair[1],
+              group_2 = pair[2],
+              hr      = NA_real_,
+              p_wald  = NA_real_,
+              method  = "Failed"))
+          }
+        }
+        
+        s <- summary(fit)
+        data.frame(
+          group_1 = pair[1],
+          group_2 = pair[2],
+          hr      = round(exp(coef(fit)[1]), 3),
+          p_wald  = round(s$waldtest["pvalue"], 4),
+          method  = "Standard Cox")
       })
       
       pairwise_df              <- do.call(rbind, pairwise_results)
       pairwise_df$p_bonferroni <- round(p.adjust(pairwise_df$p_wald, method = "bonferroni"), 4)
       pairwise_df$significant  <- ifelse(pairwise_df$p_bonferroni < 0.05, "Yes", "No")
       
-      # Save 
       write.csv(pairwise_df,
                 file      = appArtifactPath(paste0("pairwise_", cov, ".csv")),
                 row.names = FALSE)
       
       logger.info(sprintf("Pairwise comparisons for %s saved (%d pairs, Bonferroni corrected).",
-                      cov, nrow(pairwise_df)))
+                          cov, nrow(pairwise_df)))
     }
     
     
-    ## HR table for specified covariate ---
-    cox_strat_tab <- tidy(cox_strat_fit, exponentiate = TRUE, conf.int = TRUE) %>%
-      mutate(covariate = cov)
+    ## HR table ---
+    if (separation_detected) {
+      cox_strat_tab <- data.frame(
+        term      = names(cox_strat_firth$coefficients),
+        estimate  = exp(cox_strat_firth$coefficients),
+        conf.low  = cox_strat_firth$ci.lower,
+        conf.high = cox_strat_firth$ci.upper,
+        p.value   = cox_strat_firth$prob,
+        covariate = cov,
+        row.names = NULL
+      )
+    } else {
+      cox_strat_tab <- tidy(cox_strat_fit, exponentiate = TRUE, conf.int = TRUE) %>%
+        mutate(covariate = cov)
+    }
     
-    # Save 
     write.csv(cox_strat_tab,
               file      = appArtifactPath(paste0("cox_hr_", cov, ".csv")),
               row.names = FALSE)
     
     
-    ## KM survival curves stratified by covariate ---------------------------
+    ## KM survival curves ---
     km_fit <- survfit(km_formula, data = fitting_data)
     
     km_plot <- ggsurvfit(km_fit, linewidth = 0.9) +
-      add_confidence_interval(alpha = 0.12) +
-      add_risktable(risktable_stats = c("n.risk", "cum.event"),
-                    theme = theme_risktable_default(axis.text.y.size = 9)) +
+      add_confidence_interval(alpha = 0.12) + 
       scale_color_manual(values = pal) +
       scale_fill_manual(values  = pal) +
       scale_y_continuous(limits = c(0, 1), labels = percent_format(accuracy = 1)) +
@@ -1640,10 +1853,8 @@ rFunction = function(data,
             legend.position    = "top",
             panel.grid.major.y = element_line(color = "grey92"))
     
-    # Save 
     png(appArtifactPath(paste0("km_by_", cov, ".png")),
-        width = 8, height = 7, 
-        units = "in", res = 300)
+        width = 8, height = 7, units = "in", res = 300)
     print(km_plot)
     dev.off()
     
@@ -1664,20 +1875,19 @@ rFunction = function(data,
                 .groups = "drop") %>%
       mutate(lr_p_value = lr_p, covariate = cov)
     
-    # Save
     write.csv(km_summary,
               file      = appArtifactPath(paste0("km_summary_", cov, ".csv")),
               row.names = FALSE)
     
     
-    ## Forest plot (per-group HRs) ---
+    ## Forest plot ---
     forest_strat <- ggplot(cox_strat_tab, aes(x = estimate, y = term)) +
       geom_vline(xintercept = 1, linetype = "dashed", color = "grey50") +
       geom_errorbarh(aes(xmin = conf.low, xmax = conf.high),
                      height = 0.25, linewidth = 0.8, color = "grey30") +
       geom_point(aes(color = p.value < 0.05), size = 3.5) +
       scale_color_manual(values = c("TRUE" = "#D62728", "FALSE" = "#1F77B4"),
-                         labels = c("TRUE" = "p < 0.05",  "FALSE" = "p ≥ 0.05"),
+                         labels = c("TRUE" = "p < 0.05", "FALSE" = "p ≥ 0.05"),
                          name   = NULL) +
       scale_x_log10(labels = number_format(accuracy = 0.01)) +
       labs(title    = paste("Hazard Ratios —", cov),
@@ -1689,15 +1899,13 @@ rFunction = function(data,
             plot.subtitle   = element_text(size = 10, color = "grey40"),
             legend.position = "top")
     
-    # Save   
-    png(appArtifactPath(paste0("forest_", cov, ".png")), 
-        width = 7, height = 4,
-        units = "in", res = 300)
+    png(appArtifactPath(paste0("forest_", cov, ".png")),
+        width = 7, height = 4, units = "in", res = 300)
     print(forest_strat)
     dev.off()
     
     
-    ## Cumulative hazard by group -------------------------------------------
+    ## Cumulative hazard by group ---
     cumhaz_plot <- ggsurvfit(km_fit, type = "cumhaz", linewidth = 0.9) +
       scale_color_manual(values = pal) +
       scale_fill_manual(values  = pal) +
@@ -1714,44 +1922,13 @@ rFunction = function(data,
             plot.subtitle   = element_text(size = 10, color = "grey40"),
             legend.position = "top")
     
-    # Save
     png(appArtifactPath(paste0("cumhaz_by_", cov, ".png")),
-        width = 7, height = 5, 
-        units = "in", res = 300)
+        width = 7, height = 5, units = "in", res = 300)
     print(cumhaz_plot)
     dev.off()
     
     
-    ## Log cumulative hazard (log-log) plot: visual PH assumption check -----
-    logger.info("If parallel lines = proportional hazards assumption holds")
-    
-    km_tidy <- tidy(km_fit) %>%
-      filter(estimate > 0, estimate < 1) %>%
-      mutate(log_time     = log(time),
-             log_log_surv = log(-log(estimate)),
-             group        = strata)
-    
-    loglog_plot <- ggplot(km_tidy, aes(x = log_time, y = log_log_surv, color = group)) +
-      geom_line(linewidth = 0.9) +
-      scale_color_manual(values = pal, name = cov) +
-      labs(title    = paste("Log-Log Survival Plot —", cov),
-           subtitle = "Parallel lines support the proportional hazards assumption",
-           x        = "log(Time)",
-           y        = "log(-log(Survival))") +
-      theme_classic(base_size = 12) +
-      theme(plot.title      = element_text(face = "bold"),
-            plot.subtitle   = element_text(size = 10, color = "grey40"),
-            legend.position = "top")
-    
-    # Save   
-    png(appArtifactPath(paste0("loglog_", cov, ".png")), 
-        width = 7, height = 5,
-        units = "in", res = 300)
-    print(loglog_plot)
-    dev.off()
-    
-    
-    ## Annual survival rate bar chart (yearly mode only) --------------------
+    ## Annual survival rate bar chart (yearly mode only) ---
     if (!is.null(survival_yr_start)) {
       
       annual_surv <- fitting_data %>%
@@ -1761,7 +1938,7 @@ rFunction = function(data,
                   surv_rate = 1 - (n_deaths / n_animals),
                   .groups   = "drop")
       
-      annual_plot <- ggplot(annual_surv, aes(x = factor(survival_year), 
+      annual_plot <- ggplot(annual_surv, aes(x = factor(survival_year),
                                              y = surv_rate, fill = .data[[cov]])) +
         geom_col(position = position_dodge(0.8), width = 0.7, alpha = 0.85) +
         geom_text(aes(label = paste0("n=", n_animals)),
@@ -1775,14 +1952,12 @@ rFunction = function(data,
              y     = "Survival Rate",
              fill  = cov) +
         theme_classic(base_size = 12) +
-        theme( plot.title      = element_text(face = "bold"),
-               legend.position = "top",
-               axis.text.x     = element_text(angle = 45, hjust = 1))
+        theme(plot.title      = element_text(face = "bold"),
+              legend.position = "top",
+              axis.text.x     = element_text(angle = 45, hjust = 1))
       
-      # Save   
-      png(appArtifactPath(paste0("annual_surv_by_", cov, ".png")), 
-          width = 8, height = 5,
-          units = "in", res = 300)
+      png(appArtifactPath(paste0("annual_surv_by_", cov, ".png")),
+          width = 8, height = 5, units = "in", res = 300)
       print(annual_plot)
       dev.off()
       
@@ -1791,7 +1966,6 @@ rFunction = function(data,
                 row.names = FALSE)
     }
   }
-  
   # Pass original to the next app in the MoveApps workflow
   return(data)
 } 

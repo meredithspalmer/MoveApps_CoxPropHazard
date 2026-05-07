@@ -244,6 +244,14 @@ rFunction = function(data,
   }
   
   
+  ## Inject NA columns for optional mortality fields absent from this dataset --- 
+  if (!"mortality_date" %in% names(summary_table)) summary_table$mortality_date <- NA_Date_
+  if (!"mortality_type" %in% names(summary_table)) summary_table$mortality_type <- NA_character_
+  if (!"death_comments" %in% names(summary_table)) summary_table$death_comments <- NA_character_
+  if (!"deployment_end_comments" %in% names(summary_table)) summary_table$deployment_end_comments <- NA_character_
+  if (!"deployment_end_type" %in% names(summary_table)) summary_table$deployment_end_type <- NA_character_
+  
+
   ## Clean dates ---
   
   # Start times  
@@ -354,8 +362,7 @@ rFunction = function(data,
     n_removed <- n_before - n_after
     
     if (n_removed > 0) {
-      logger.info(paste0("Warning: Removed ", n_removed, " individual(s) because deploy_off_timestamp occurred within ", censor_capture_mortality, " day(s) after deploy_on_timestamp"),
-                  call. = FALSE, immediate. = TRUE)
+      logger.info(paste0("Warning: Removed ", n_removed, " individual(s) because deploy_off_timestamp occurred within ", censor_capture_mortality, " day(s) after deploy_on_timestamp"))
     } 
   }
   
@@ -800,18 +807,18 @@ rFunction = function(data,
     spec <- subset_spec[[condition]]
     if (is.null(spec)) stop(paste("Unknown subset condition:", condition))
     
-    warning(paste0("Subsetting by ", spec$label, " (", define, ")"))
+    logger.info(paste0("Subsetting by ", spec$label, " (", define, ")"))
     value <- spec$coerce(define)
     
     if (is.null(survival_yr_start)) {
       if (!spec$summary_ok) {
-        warning("This subset only makes sense when data are processed by survival year. Please enter survival year start date.")
+        logger.fatal("This subset only makes sense when data are processed by survival year. Please enter survival year start date.")
       } else {
         summary_table <- summary_table %>% filter(.data[[spec$col]] == value)
       }
     } else {
       if (!spec$yearly_ok) {
-        warning("This subset only makes sense when data are processed by survival year. Please enter survival year start date.")
+        logger.fatal("This subset only makes sense when data are processed by survival year. Please enter survival year start date.")
       } else {
         yearly_survival <- yearly_survival %>% filter(.data[[spec$col]] == value)
       }
@@ -921,18 +928,18 @@ rFunction = function(data,
   
   # Comparison covariate 2 --- 
   if(!is.null(cox_covariate_2)) {
-    warning(paste("Comparing across", cox_covariate_2, "..."))
+    logger.info(paste("Comparing across", cox_covariate_2, "..."))
     
     if(is.null(survival_yr_start)){
-      warning("... with summary table")
+      logger.info("... with summary table")
       
       non_na_unique <- unique(na.omit(summary_table[[cox_covariate_2]]))
       
       if (length(non_na_unique) <= 1) {
         if (length(non_na_unique) == 0) {
-          warning(paste0("Warning: The grouping variable, ", cox_covariate_2, ", is entirely NA; no comparison is possible."))
+          logger.fatal(paste0("Warning: The grouping variable, ", cox_covariate_2, ", is entirely NA; no comparison is possible."))
         } else {
-          warning(paste0("Warning: There is only one non-NA comparison covariate in ", cox_covariate_2, "; no comparison is possible."))
+          logger.fatal(paste0("Warning: There is only one non-NA comparison covariate in ", cox_covariate_2, "; no comparison is possible."))
         }
         cox_covariate_2 <- NULL
       }
@@ -945,24 +952,24 @@ rFunction = function(data,
         unique_values <- sort(unique(summary_table[[cox_covariate_2]]))
         n_values      <- length(unique_values)
         
-        warning(sprintf("%d values of comparison covariate detected after cleaning: %s", n_values, paste(unique_values, collapse = ", ")))
+        logger.info(sprintf("%d values of comparison covariate detected after cleaning: %s", n_values, paste(unique_values, collapse = ", ")))
         
         n_lost <- n_original - nrow(summary_table)
         if (n_lost > 0) {
-          warning(sprintf("%d individuals with NA covariate value removed from study.", n_lost))
+          logger.info(sprintf("%d individuals with NA covariate value removed from study.", n_lost))
         }
       }
       
     } else {
-      warning("... with yearly survival")
+      logger.info("... with yearly survival")
       
       non_na_unique <- unique(na.omit(yearly_survival[[cox_covariate_2]]))
       
       if (length(non_na_unique) <= 1) {
         if (length(non_na_unique) == 0) {
-          warning(paste0("Warning: The grouping variable, ", cox_covariate_2, ", is entirely NA; no comparison is possible."))
+          logger.fatal(paste0("Warning: The grouping variable, ", cox_covariate_2, ", is entirely NA; no comparison is possible."))
         } else {
-          warning(paste0("Warning: There is only one non-NA comparison covariate in ", cox_covariate_2, "; no comparison is possible."))
+          logger.info(paste0("Warning: There is only one non-NA comparison covariate in ", cox_covariate_2, "; no comparison is possible."))
         }
         cox_covariate_2 <- NULL
       }
@@ -975,11 +982,11 @@ rFunction = function(data,
         unique_values <- sort(unique(yearly_survival[[cox_covariate_2]]))
         n_values      <- length(unique_values)
         
-        warning(sprintf("%d values of comparison covariate detected after cleaning: %s", n_values, paste(unique_values, collapse = ", ")))
+        logger.info(sprintf("%d values of comparison covariate detected after cleaning: %s", n_values, paste(unique_values, collapse = ", ")))
         
         n_lost <- n_original - nrow(yearly_survival)
         if (n_lost > 0) {
-          warning(sprintf("%d individuals with NA covariate value removed from study.", n_lost))
+          logger.info(sprintf("%d individuals with NA covariate value removed from study.", n_lost))
         }
       }
     }
@@ -987,18 +994,18 @@ rFunction = function(data,
   
   # Comparison covariate 3 ---  
   if(!is.null(cox_covariate_3)) {
-    warning(paste("Comparing across", cox_covariate_3, "..."))
+    logger.info(paste("Comparing across", cox_covariate_3, "..."))
     
     if(is.null(survival_yr_start)){
-      warning("... with summary table")
+      logger.info("... with summary table")
       
       non_na_unique <- unique(na.omit(summary_table[[cox_covariate_3]]))
       
       if (length(non_na_unique) <= 1) {
         if (length(non_na_unique) == 0) {
-          warning(paste0("Warning: The grouping variable, ", cox_covariate_3, ", is entirely NA; no comparison is possible."))
+          logger.fatal(paste0("Warning: The grouping variable, ", cox_covariate_3, ", is entirely NA; no comparison is possible."))
         } else {
-          warning(paste0("Warning: There is only one non-NA comparison covariate in ", cox_covariate_3, "; no comparison is possible."))
+          logger.fatal(paste0("Warning: There is only one non-NA comparison covariate in ", cox_covariate_3, "; no comparison is possible."))
         }
         cox_covariate_3 <- NULL
       }
@@ -1011,24 +1018,24 @@ rFunction = function(data,
         unique_values <- sort(unique(summary_table[[cox_covariate_3]]))
         n_values      <- length(unique_values)
         
-        warning(sprintf("%d values of comparison covariate detected after cleaning: %s", n_values, paste(unique_values, collapse = ", ")))
+        logger.info(sprintf("%d values of comparison covariate detected after cleaning: %s", n_values, paste(unique_values, collapse = ", ")))
         
         n_lost <- n_original - nrow(summary_table)
         if (n_lost > 0) {
-          warning(sprintf("%d individuals with NA covariate value removed from study.", n_lost))
+          logger.info(sprintf("%d individuals with NA covariate value removed from study.", n_lost))
         }
       }
       
     } else {
-      warning("... with yearly survival")
+      logger.info("... with yearly survival")
       
       non_na_unique <- unique(na.omit(yearly_survival[[cox_covariate_3]]))
       
       if (length(non_na_unique) <= 1) {
         if (length(non_na_unique) == 0) {
-          warning(paste0("Warning: The grouping variable, ", cox_covariate_3, ", is entirely NA; no comparison is possible."))
+          logger.fatal(paste0("Warning: The grouping variable, ", cox_covariate_3, ", is entirely NA; no comparison is possible."))
         } else {
-          warning(paste0("Warning: There is only one non-NA comparison covariate in ", cox_covariate_3, "; no comparison is possible."))
+          logger.fatal(paste0("Warning: There is only one non-NA comparison covariate in ", cox_covariate_3, "; no comparison is possible."))
         }
         cox_covariate_3 <- NULL
       }
@@ -1041,11 +1048,11 @@ rFunction = function(data,
         unique_values <- sort(unique(yearly_survival[[cox_covariate_3]]))
         n_values      <- length(unique_values)
         
-        warning(sprintf("%d values of comparison covariate detected after cleaning: %s", n_values, paste(unique_values, collapse = ", ")))
+        logger.info(sprintf("%d values of comparison covariate detected after cleaning: %s", n_values, paste(unique_values, collapse = ", ")))
         
         n_lost <- n_original - nrow(yearly_survival)
         if (n_lost > 0) {
-          warning(sprintf("%d individuals with NA covariate value removed from study.", n_lost))
+          logger.info(sprintf("%d individuals with NA covariate value removed from study.", n_lost))
         }
       }
     }
@@ -1540,27 +1547,6 @@ rFunction = function(data,
       dev.off()
     }
   }
-
-
-  ## Plot forest plot of hazard ratios --- 
-  forest_plot <- ggplot(cox.tab, aes(x = estimate, y = term)) +
-    geom_point(size = 3) +
-    geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), height = 0.2) +
-    geom_vline(xintercept = 1, linetype = "dashed", color = "red") +
-    scale_x_log10() +  # HRs are naturally log-scaled
-    labs(title    = "Hazard Ratios with 95% Confidence Intervals",
-         subtitle = ifelse(firth_used, "Firth's Penalized Cox Model", "Standard Cox Model"),
-         x        = "Hazard Ratio (log scale)",
-         y        = NULL) +
-    theme_classic(base_size = 12) +
-    theme(plot.title = element_text(face = "bold"))
-  
-  # Save   
-  png(appArtifactPath("forest_plot.png"), 
-      width = 7, height = 5,
-      units = "in", res = 300)
-  print(forest_plot)
-  dev.off()
   
   
   ## Stratified Group Comparisons ---------------------------------------------
@@ -1966,6 +1952,7 @@ rFunction = function(data,
                 row.names = FALSE)
     }
   }
+  
   # Pass original to the next app in the MoveApps workflow
   return(data)
-} 
+}  

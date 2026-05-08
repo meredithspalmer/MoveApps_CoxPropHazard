@@ -12,7 +12,7 @@ These analyses can be performed across an entire dataset, within defined time pe
 
 ## Documentation
 
-This app implements Cox Proportional Hazards (CoxPH) survival modelling. It produces hazard ratio tables, survival curves, cumulative hazard plots, Schoenfeld residual diagnostics, and stratified comparisons of per-group survival for different user-defined attributes.
+This app implements Cox Proportional Hazards (CoxPH) survival modelling. It produces hazard ratio tables, survival curves, Kaplan-Meier survival curves, cumulative hazard plots, Schoenfeld residual diagnostics, and stratified comparisons of per-group survival for different user-defined attributes. 
 
 **Cox Proportional Hazards Model:** The CoxPH model is a semi-parametric method used to estimate the relationship between one or more covariates and survival time, specifically, the risk (hazard) of experiencing an event (e.g., death) at any point in time given that the individual has survived up to that point. This analysis allows for:
 

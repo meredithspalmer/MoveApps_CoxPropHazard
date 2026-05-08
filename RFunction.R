@@ -1507,8 +1507,6 @@ rFunction = function(data,
     ## Plot Schoenfeld residuals ---
     if (!firth_used) {
       ph_test <- cox.zph(coxph_fit)
-      print(ph_test)
-      
       ph_plot <- ggcoxzph(ph_test, point.col = "steelblue", point.size = 1.5, point.alpha = 0.5) 
       
       # Save 
@@ -1561,6 +1559,9 @@ rFunction = function(data,
   fitting_data <- if (is.null(survival_yr_start)) summary_table else yearly_survival
   
   for (cov_item in active_covariates) {
+    
+    # Reset fitting_data at the start of each iteration
+    fitting_data <- if (is.null(survival_yr_start)) summary_table else yearly_survival
     
     cov <- cov_item$var
     ref <- cov_item$ref

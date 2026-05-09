@@ -42,8 +42,9 @@ rFunction = function(data,
                      calc_month_mort,
                      calc_tracking_history, 
                      calc_residuals, 
-                     calc_artifacts_at_mean) 
-{
+                     calc_artifacts_at_mean, 
+                     add_cis, 
+                     zoom_to_plot) {
   
   ## Load auxiliary data ------------------------------------------------------ 
   
@@ -587,6 +588,7 @@ rFunction = function(data,
     logger.info(sprintf("Survival years found in data: %d to %d (%d years total)",
                         min_year, max_year, length(possible_years)))
     
+    # Create all possible survival periods
     possible_periods <- tibble(survival_year = possible_years) %>%
       mutate(period_info = map(survival_year, ~ {
         start <- safe_make_date(.x,     start_month, start_day)
@@ -596,8 +598,6 @@ rFunction = function(data,
       unnest(period_info)
     
     # Infer which columns to carry into yearly_survival
-    
-    # Pre-check optional columns
     has_mortality_date          <- "mortality_date"          %in% names(summary_table)
     has_mortality_type          <- "mortality_type"          %in% names(summary_table)
     has_death_comments          <- "death_comments"          %in% names(summary_table)

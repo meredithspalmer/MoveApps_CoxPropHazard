@@ -270,7 +270,7 @@ rFunction = function(data,
     if (n_missing > 0) {
       logger.info(
         sprintf("Warning: Replaced %d missing deploy_on_timestamp value%s with first_timestamp.",
-                n_missing, if (n_missing == 1) "" else "s"), call. = FALSE, immediate. = TRUE)
+                n_missing, if (n_missing == 1) "" else "s"))
     }
   } 
   
@@ -340,7 +340,7 @@ rFunction = function(data,
   if (n_removed > 0) {
     logger.info(
       sprintf("Warning: Removed %d individual%s where deploy_off_timestamp < deploy_on_timestamp.",
-              n_removed, if (n_removed == 1) "" else "s"), call. = FALSE, immediate. = TRUE)
+              n_removed, if (n_removed == 1) "" else "s"))
   }
   
   
@@ -408,7 +408,7 @@ rFunction = function(data,
     if (n_removed > 0) {
       logger.info(
         sprintf("Warning: %d record%s did not overlap the user-defined study window and were removed.",
-                n_removed, if (n_removed == 1) "" else "s"), call. = FALSE, immediate. = TRUE)
+                n_removed, if (n_removed == 1) "" else "s"))
     }
   } 
   
@@ -523,13 +523,12 @@ rFunction = function(data,
   # Error out: no deaths
   n_mort_events <- sum(summary_table$mortality_event == 1L, na.rm = TRUE)
   if (n_mort_events == 0) {
-    logger.fatal("Cannot run survival analysis: no mortality events detected.", 
-                 call. = FALSE, immediate. = TRUE)
+    logger.fatal("Cannot run survival analysis: no mortality events detected.")
   }
   
   # Warning: few deaths
   if (n_mort_events <= 10) {
-    logger.warn(sprintf("Few (%d) deaths detected across entire dataset. Particularly if data is further subset, model may have low statistical power. This could potentially result in unreliable estimates and poor predictive capacity", n_mort_events), call. = FALSE, immediate. = TRUE)
+    logger.warn(sprintf("Few (%d) deaths detected across entire dataset. Particularly if data is further subset, model may have low statistical power. This could potentially result in unreliable estimates and poor predictive capacity", n_mort_events))
   }
   
   
@@ -556,7 +555,7 @@ rFunction = function(data,
       if (is.na(date)) return(tibble(survival_year = NA_integer_,
                                      period_start  = NA_Date_,
                                      period_end    = NA_Date_))
-      y                    <- year(date)
+      y <- year(date)
       period_start_this_yr <- safe_make_date(y, start_month, start_day)
       
       if (date >= period_start_this_yr) {
@@ -573,6 +572,7 @@ rFunction = function(data,
              period_end    = period_end)
     }
     
+    # Vectorized helpers
     get_survival_year <- function(date) get_survival_period(date)$survival_year
     
     # Determine survival year range

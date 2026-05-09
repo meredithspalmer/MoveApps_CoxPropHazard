@@ -171,7 +171,7 @@
     {
       "id": "cox_covariate_3",
        "name": "Third covariate for CoxPH modelling",
-      "description": "If required, identify a third covariate variable for grouping. NPlease enter the exact column name of your covariate of choice, or `survival_year` or `lifestage` for calculations based on user-defined variables (see below). Note that `survival year` and `life stage` require entry of additional and/or auxiliary data.",
+      "description": "If required, identify a third covariate variable for grouping. Please enter the exact column name of your covariate of choice, or `survival_year` or `lifestage` for calculations based on user-defined variables (see below). Note that `survival year` and `life stage` require entry of additional and/or auxiliary data.",
       "defaultValue": null,
       "type": "STRING"
     }, 

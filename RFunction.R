@@ -228,11 +228,8 @@ rFunction = function(data,
       
       .groups = "drop") |>
     
-    mutate(
-      across(any_of(cols_categorical), ~ if_else(. == "", NA_character_, .)),
-      across(any_of(c("deploy_on_timestamp", "deploy_off_timestamp")), as.Date)
-    )
-  
+    mutate(across(any_of(cols_categorical), ~ if_else(. == "", NA_character_, .)),
+           across(any_of(c("deploy_on_timestamp", "deploy_off_timestamp")), as.Date))
   
   # Quick checks 
   unhandled_cols <- setdiff(names(events_with_ind),
@@ -642,20 +639,16 @@ rFunction = function(data,
       crossing(possible_periods) %>%
       
       # Join back all remaining carry columns
-      left_join(
-        summary_table %>%
-          dplyr::select(individual_id, individual_local_identifier,
-                        all_of(setdiff(carry_cols, static_cols))),
-        by = c("individual_id", "individual_local_identifier")
-      ) %>%
+      left_join(summary_table %>%
+                  dplyr::select(individual_id, individual_local_identifier,
+                                all_of(setdiff(carry_cols, static_cols))),
+                by = c("individual_id", "individual_local_identifier")) %>%
       
       # Clip monitoring interval to the survival period
-      mutate(
-        monitor_start    = pmax(deploy_on_timestamp, period_start, na.rm = TRUE),
-        monitor_end      = pmin(deploy_off_timestamp, period_end,  na.rm = TRUE),
-        active_in_period = monitor_start <= monitor_end &
-          !is.na(monitor_start) & !is.na(monitor_end)
-      ) %>%
+      mutate(monitor_start    = pmax(deploy_on_timestamp, period_start, na.rm = TRUE),
+             monitor_end      = pmin(deploy_off_timestamp, period_end,  na.rm = TRUE),
+             active_in_period = monitor_start <= monitor_end &
+               !is.na(monitor_start) & !is.na(monitor_end)) %>%
       filter(active_in_period) %>%
       
       # Inject NA columns for any optional mortality columns that are absent,
@@ -705,18 +698,15 @@ rFunction = function(data,
         deployment_end_comments = if_else(died_this_year, deployment_end_comments, NA_character_),
         deployment_end_type     = if_else(died_this_year, deployment_end_type,     NA_character_),
         
-        days_at_risk = as.integer(exit_date - entry_date) + 1L
-      ) %>%
+        days_at_risk = as.integer(exit_date - entry_date) + 1L) %>%
       
       select(-active_in_period, -monitor_start, -monitor_end, -died_this_year) %>%
       
       # Calculate per-year entry/exit time in days (relative to each period_start)
-      mutate(
-        analysis_entry_date = entry_date,
-        analysis_exit_date  = exit_date,
-        entry_time_days     = as.numeric(difftime(entry_date, period_start, units = "days")),
-        exit_time_days      = as.numeric(difftime(exit_date,  period_start, units = "days"))
-      ) %>%
+      mutate(analysis_entry_date = entry_date,
+             analysis_exit_date  = exit_date,
+             entry_time_days     = as.numeric(difftime(entry_date, period_start, units = "days")),
+             exit_time_days      = as.numeric(difftime(exit_date,  period_start, units = "days"))) %>%
       
       arrange(individual_id, survival_year)
     
@@ -737,7 +727,7 @@ rFunction = function(data,
     
     # Confirm data exists 
     if (!"animal_birth_hatch_year" %in% names(yearly_survival)) {
-      logger.warn("Column 'animal_birth_hatch_year' does not exist in the data frame. Cannot compute life stage.")
+      logger.error("Column 'animal_birth_hatch_year' does not exist in the data frame. Cannot compute life stage.")
     }
     
     # Calculate age and age_class
@@ -827,7 +817,7 @@ rFunction = function(data,
     list(summary_table = summary_table, yearly_survival = yearly_survival)
   }
   
-  # SUBSET CONDITION 1 ---
+  # Subset condition 1 ---
   result <- apply_subset(subset_condition_1, subset_condition_define_1, summary_table,
                          yearly_survival, survival_yr_start)
   summary_table    <- result$summary_table
@@ -841,7 +831,7 @@ rFunction = function(data,
     }
   }
   
-  # SUBSET CONDITION 2 ---
+  # Subset condition 2 ---
   result <- apply_subset(subset_condition_2, subset_condition_define_2, summary_table,
                          yearly_survival, survival_yr_start)
   summary_table   <- result$summary_table
@@ -1065,6 +1055,9 @@ rFunction = function(data,
   
   if(calc_tracking_history == TRUE) {
     
+    # Helper (base R, no extra packages)
+    clamp <- function(x, lo, hi) max(lo, min(hi, x))
+    
     if (is.null(survival_yr_start)) {
       logger.info("Plotting tracking history using summary table...")
       
@@ -1141,10 +1134,23 @@ rFunction = function(data,
                          date_labels = "%Y",
                          expand = expansion(mult = c(0.01, 0.03)))
       
-      # Save plot  
-      png(appArtifactPath("tracking_history.png"), 
-          width = 10, height = 8,
-          units = "in", res = 300)
+      # Dynamic dimensions based on data
+      n_individuals <- n_distinct(deployment_summary$individual_id)
+      time_range_years <- as.numeric(difftime(max(deployment_summary$plot_end), 
+                                              min(deployment_summary$plot_start), 
+                                              units = "days")) / 365.25
+      
+      # Height: base + per-individual allowance, clamped to reasonable bounds
+      plot_height <- clamp(2 + n_individuals * 0.18, 5, 40)
+      
+      # Width: base + per-year allowance, clamped to reasonable bounds
+      plot_width  <- clamp(4 + time_range_years * 1.2, 7, 24)
+      
+      # Save plot
+      png(appArtifactPath("tracking_history.png"),
+          width  = plot_width,
+          height = plot_height,
+          units  = "in", res = 300)
       print(tracking_history)
       dev.off()
       
@@ -1221,10 +1227,23 @@ rFunction = function(data,
                          date_labels = "%Y",
                          expand      = expansion(mult = c(0.01, 0.03)))
       
-      # Save plot  
-      png(appArtifactPath("tracking_history.png"), 
-          width = 10, height = 8, 
-          units = "in", res = 300)
+      # Dynamic dimensions based on data
+      n_individuals <- n_distinct(deployment_summary$individual_id)
+      time_range_years <- as.numeric(difftime(max(deployment_summary$plot_end), 
+                                              min(deployment_summary$plot_start), 
+                                              units = "days")) / 365.25
+      
+      # Height: base + per-individual allowance, clamped to reasonable bounds
+      plot_height <- clamp(2 + n_individuals * 0.18, 5, 40)
+      
+      # Width: base + per-year allowance, clamped to reasonable bounds
+      plot_width  <- clamp(4 + time_range_years * 1.2, 7, 24)
+      
+      # Save plot
+      png(appArtifactPath("tracking_history.png"),
+          width  = plot_width,
+          height = plot_height,
+          units  = "in", res = 300)
       print(tracking_history)
       dev.off()
       
@@ -1264,11 +1283,10 @@ rFunction = function(data,
       monthly_mort_plot <- ggplot(monthly_morts, aes(x = death_month, y = factor(death_year), 
                                                      fill = factor(n_mortalities))) +
         geom_tile(color = "white", linewidth = 0.5) +
-        scale_fill_viridis_d(option    = "magma",
-                             direction = -1,
-                             na.value  = "grey92",
-                             name      = "Number of\nmortality events",
-                             drop      = FALSE) +
+        scale_fill_brewer(palette  = "PuBu",
+                          na.value = "grey92",
+                          name     = "Number of\nmortality events",
+                          drop     = FALSE) + 
         scale_x_discrete(position = "top") +
         labs(title    = "Monthly Distribution of Confirmed Mortality Events",
              subtitle = paste0(
@@ -1283,8 +1301,8 @@ rFunction = function(data,
               legend.position   = "right",
               legend.title      = element_text(size = 11),
               legend.text       = element_text(size = 10),
-              plot.title        = element_text(face = "bold", hjust = 0.5, size = 16),
-              plot.subtitle     = element_text(hjust = 0.5, size = 12),
+              plot.title        = element_text(face = "bold", hjust = 0, size = 16),
+              plot.subtitle     = element_text(hjust = 0, size = 12),
               axis.text.x       = element_text(size = 11, face = "bold"),
               axis.text.y       = element_text(size = 11))
       
@@ -1328,11 +1346,10 @@ rFunction = function(data,
                                       y = factor(death_year),
                                       fill = factor(n_mortalities))) +
         geom_tile(color = "white", linewidth = 0.5) +
-        scale_fill_viridis_d(option = "magma",
-                             direction = -1,
-                             na.value = "grey92",
-                             name = "Number of\nmortality events",
-                             drop = FALSE) +
+        scale_fill_brewer(palette  = "PuBu",
+                          na.value = "grey92",
+                          name     = "Number of\nmortality events",
+                          drop     = FALSE) + 
         scale_x_discrete(position = "top") +
         labs(title = "Monthly Distribution of Confirmed Mortality Events",
              subtitle = paste0(
@@ -1347,8 +1364,8 @@ rFunction = function(data,
               legend.position = "right",
               legend.title = element_text(size = 11),
               legend.text = element_text(size = 10),
-              plot.title = element_text(face = "bold", hjust = 0.5, size = 16),
-              plot.subtitle = element_text(hjust = 0.5, size = 12),
+              plot.title = element_text(face = "bold", hjust = 0, size = 16),
+              plot.subtitle = element_text(hjust = 0, size = 12),
               axis.text.x = element_text(size = 11, face = "bold"),
               axis.text.y = element_text(size = 11))
       
@@ -1469,13 +1486,16 @@ rFunction = function(data,
            y        = "Survival Probability") +
       scale_y_continuous(limits = c(0, 1), labels = percent_format(accuracy = 1)) +
       scale_x_continuous(expand = c(0.02, 0),
-                         breaks = pretty(range(surv.at.means.tab$time), n = 8)) + 
+                         breaks = pretty(range(surv.at.means.tab$time), n = 8)) +
       theme_classic(base_size = 12) +
-      theme(plot.title       = element_text(face = "bold", size = 14),
-            plot.subtitle    = element_text(size = 10, color = "grey40"),
-            axis.title       = element_text(face = "bold"),
-            legend.position  = "none",
-            panel.grid.major.y = element_line(color = "grey92"))
+      theme(plot.title         = element_text(face = "bold", size = 14),
+            plot.subtitle      = element_text(size = 12, color = "gray50"),
+            axis.text          = element_text(color = "black"),
+            axis.title         = element_text(size = 12),
+            panel.grid.major.y = element_line(color = "gray90"),
+            panel.border       = element_rect(color = "black", fill = NA, linewidth = 0.5),
+            legend.position    = "none",
+            plot.margin        = margin(10, 10, 10, 10))
     
     # Save 
     png(appArtifactPath("surv_at_means_plot.png"), 
@@ -1487,9 +1507,21 @@ rFunction = function(data,
     ## Plot cumulative hazard curve --- 
     cum_hazard <- ggsurvfit(surv.at.means, type = "cumhaz") +
       add_confidence_interval() +
-      labs(title = "Cumulative Hazard at Covariate Means", x = "Days", y = "Cumulative Hazard") +
-      scale_x_continuous(breaks = pretty(range(surv.at.means.tab$time), n = 8)) +
-      theme_classic(base_size = 12)
+      labs(title    = "Cumulative Hazard at Covariate Means",
+           subtitle = ifelse(firth_used, "Firth's Penalized Cox Model", "Standard Cox Model"),
+           x        = "Days",
+           y        = "Cumulative Hazard") +
+      scale_x_continuous(expand = c(0.02, 0),
+                         breaks = pretty(range(surv.at.means.tab$time), n = 8)) +
+      theme_classic(base_size = 12) +
+      theme(plot.title         = element_text(face = "bold", size = 14),
+            plot.subtitle      = element_text(size = 12, color = "gray50"),
+            axis.text          = element_text(color = "black"),
+            axis.title         = element_text(size = 12),
+            panel.grid.major.y = element_line(color = "gray90"),
+            panel.border       = element_rect(color = "black", fill = NA, linewidth = 0.5),
+            legend.position    = "none",
+            plot.margin        = margin(10, 10, 10, 10))
     
     # Save   
     png(appArtifactPath("cum_hazard_at_means_plot.png"), 
@@ -1555,8 +1587,11 @@ rFunction = function(data,
     list(var = cox_covariate_2, ref = cox_covariate_2_ref),
     list(var = cox_covariate_3, ref = cox_covariate_3_ref)
   )
+  
   active_covariates <- Filter(function(x) !is.null(x$var), active_covariates)
   fitting_data <- if (is.null(survival_yr_start)) summary_table else yearly_survival
+  all_forest_tabs <- list()
+  
   
   for (cov_item in active_covariates) {
     
@@ -1645,30 +1680,11 @@ rFunction = function(data,
                 file      = appArtifactPath(paste0("cox_hr_", cov, ".csv")),
                 row.names = FALSE)
       
-      ## Forest plot ---
-      forest_strat <- ggplot(cox_strat_tab, aes(x = estimate, y = term)) +
-        geom_vline(xintercept = 1, linetype = "dashed", color = "grey50") +
-        geom_errorbarh(aes(xmin = conf.low, xmax = conf.high),
-                       height = 0.25, linewidth = 0.8, color = "grey30") +
-        geom_point(aes(color = p.value < 0.05), size = 3.5) +
-        scale_color_manual(values = c("TRUE" = "#D62728", "FALSE" = "#1F77B4"),
-                           labels = c("TRUE" = "p < 0.05", "FALSE" = "p ≥ 0.05"),
-                           name   = NULL) +
-        scale_x_log10(labels = number_format(accuracy = 0.01)) +
-        labs(title    = paste("Hazard Ratio —", cov),
-             subtitle = sprintf("Cox LR test: chi-sq=%.3f, p=%.4f",
-                                test_results$chi_sq[1], test_results$p_value[1]),
-             x        = "Hazard Ratio (log scale)",
-             y        = NULL) +
-        theme_classic(base_size = 12) +
-        theme(plot.title      = element_text(face = "bold"),
-              plot.subtitle   = element_text(size = 10, color = "grey40"),
-              legend.position = "top")
-      
-      png(appArtifactPath(paste0("forest_", cov, ".png")),
-          width = 7, height = 3, units = "in", res = 300)
-      print(forest_strat)
-      dev.off()
+      # Collect for combined forest plot
+      all_forest_tabs[[cov]] <- cox_strat_tab %>%
+        mutate(covariate = cov,
+               lr_chisq  = test_results$chi_sq[1],
+               lr_p      = test_results$p_value[1])
       
       next
     }
@@ -1867,29 +1883,11 @@ rFunction = function(data,
               row.names = FALSE)
     
     
-    ## Forest plot ---
-    forest_strat <- ggplot(cox_strat_tab, aes(x = estimate, y = term)) +
-      geom_vline(xintercept = 1, linetype = "dashed", color = "grey50") +
-      geom_errorbarh(aes(xmin = conf.low, xmax = conf.high),
-                     height = 0.25, linewidth = 0.8, color = "grey30") +
-      geom_point(aes(color = p.value < 0.05), size = 3.5) +
-      scale_color_manual(values = c("TRUE" = "#D62728", "FALSE" = "#1F77B4"),
-                         labels = c("TRUE" = "p < 0.05", "FALSE" = "p ≥ 0.05"),
-                         name   = NULL) +
-      scale_x_log10(labels = number_format(accuracy = 0.01)) +
-      labs(title    = paste("Hazard Ratios —", cov),
-           subtitle = sprintf("Cox LR test: chi-sq=%.3f, p=%.4f", test_results$chi_sq[1], lr_p),
-           x        = "Hazard Ratio (log scale)",
-           y        = NULL) +
-      theme_classic(base_size = 12) +
-      theme(plot.title      = element_text(face = "bold"),
-            plot.subtitle   = element_text(size = 10, color = "grey40"),
-            legend.position = "top")
-    
-    png(appArtifactPath(paste0("forest_", cov, ".png")),
-        width = 7, height = 4, units = "in", res = 300)
-    print(forest_strat)
-    dev.off()
+    ## Collect for combined forest plot --- 
+    all_forest_tabs[[cov]] <- cox_strat_tab %>%
+      mutate(covariate = cov,
+             lr_chisq  = test_results$chi_sq[1],
+             lr_p      = lr_p)
     
     
     ## Cumulative hazard by group ---
@@ -1952,6 +1950,65 @@ rFunction = function(data,
                 file      = appArtifactPath(paste0("annual_surv_", cov, ".csv")),
                 row.names = FALSE)
     }
+  }
+  
+  ## Combined forest plot across all covariates --------------------------------
+  
+  if (length(all_forest_tabs) > 0) {
+    
+    escaped_covs <- gsub("([.+*?^${}()|\\[\\]\\\\])", "\\\\\\1", 
+                         names(all_forest_tabs))
+    
+    combined_forest_tab <- bind_rows(all_forest_tabs) %>%
+      mutate(
+        term_clean  = str_remove(term, regex(paste(escaped_covs, collapse = "|"))),
+        term_clean  = if_else(term_clean == "", term, term_clean),
+        significant = p.value < 0.05,
+        facet_label = sprintf("%s\n(LR chi-sq=%.2f, p=%.4f)", covariate, lr_chisq, lr_p),
+        term_clean  = fct_inorder(term_clean)
+      )
+    
+    combined_forest_plot <- ggplot(combined_forest_tab,
+                                   aes(x = estimate, y = term_clean, color = significant)) +
+      geom_vline(xintercept = 1, linetype = "dashed", color = "grey50") +
+      geom_errorbarh(aes(xmin = conf.low, xmax = conf.high),
+                     height = 0.25, linewidth = 0.8, color = "grey30") +
+      geom_point(size = 3.5) +
+      scale_color_manual(values = c("TRUE"  = "#D62728",
+                                    "FALSE" = "#1F77B4"),
+                         labels = c("TRUE"  = "p < 0.05",
+                                    "FALSE" = "p ≥ 0.05"),
+                         name   = NULL) +
+      scale_x_log10(labels = number_format(accuracy = 0.01)) +
+      facet_wrap(~ facet_label, scales = "free_y", ncol = 1) +
+      labs(title    = "Hazard Ratios — All Covariates",
+           subtitle = ifelse(firth_used,
+                             "Firth's Penalized Cox Model",
+                             "Standard Cox Model"),
+           x        = "Hazard Ratio (log scale)",
+           y        = NULL) +
+      theme_classic(base_size = 12) +
+      theme(plot.title         = element_text(face = "bold", size = 14),
+            plot.subtitle      = element_text(size = 12, color = "gray50"),
+            axis.text          = element_text(color = "black"),
+            axis.title         = element_text(size = 12),
+            panel.grid.major.y = element_line(color = "gray90"),
+            panel.border       = element_rect(color = "black", fill = NA, linewidth = 0.5),
+            legend.position    = "top",
+            strip.text         = element_text(face = "bold", size = 11),
+            strip.background   = element_rect(fill = "grey95", color = NA),
+            plot.margin        = margin(10, 10, 10, 10))
+    
+    # Dynamic height: ~2 inches per covariate + rows within each
+    n_rows_total <- nrow(combined_forest_tab)
+    plot_height  <- max(4, 1.5 * length(all_forest_tabs) + 0.4 * n_rows_total)
+    
+    png(appArtifactPath("forest_combined.png"),
+        width  = 8,
+        height = plot_height,
+        units  = "in", res = 300)
+    print(combined_forest_plot)
+    dev.off()
   }
   
   # Pass original to the next app in the MoveApps workflow

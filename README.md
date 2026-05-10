@@ -19,21 +19,25 @@ This app implements Cox Proportional Hazards (CoxPH) survival modelling. It prod
 - *Right-censoring*, where the exact time of death is unknown for some individuals because they are still alive at the end of the study period, lost to follow-up (e.g., collar failure), or exit the study period alive for other reasons.
 - *Staggered entry* (also called left truncation or delayed entry), where individuals enter the study at different times rather than all starting at the same baseline.
 
-**CoxPH Assumptions**: The Cox PH model assumes that the hazard ratio between any two individuals remains *constant over time* (proportional hazards). The app tests this assumption by generating Schoenfeld residuals and will generate a warning if the assumption is violated for any covariate. Users should interpret results cautiously when this assumption does not hold. 
+**CoxPH Assumptions**: The Cox PH model assumes that the hazard ratio between any two individuals remains *constant over time* (proportional hazards). The app tests this assumption by generating Schoenfeld residuals. Users should interpret results cautiously when this assumption does not hold. 
 
 **Firth's Penalized Cox Model:** When complete separation is detected in the standard CoxPH model (i.e., a covariate perfectly predicts survival or death), the app automatically falls back to Firth's penalized Cox regression (`coxphf`). This method applies a likelihood penalization that produces finite, unbiased estimates in cases where maximum likelihood estimation fails to converge. All outputs clearly indicate whether Firth's or standard Cox was used. Separation detection and Firth's fallback applies both to the main Cox model and to all stratified group comparisons, including pairwise comparisons.
 
-**Stratified Comparisons:** When grouping variables are specified, the app produces stratified Kaplan-Meier survival curves, cumulative hazard plots, and likelihood ratio, Wald, and score test results for each covariate. Pairwise comparisons with Bonferroni correction are computed when more than two groups are present. Continuous covariates (e.g., weight) are detected automatically and handled with Cox model tests and a forest plot only — KM curves and group-level outputs are not produced for continuous predictors, as these require discrete groups.
+**Stratified Comparisons:** When grouping variables are specified, the app produces stratified Kaplan-Meier survival curves, cumulative hazard plots, and likelihood ratio, Wald, and score test results for each covariate. Pairwise comparisons with Bonferroni correction are computed when more than two groups are present. Continuous covariates (e.g., weight) are detected automatically and handled with Cox model tests and a forest plot only — KM curves and group-level outputs are not produced for continuous predictors, as these require discrete groups. 
 
-**Cumulative Hazard Plots:** These plots depict the total accumulated risk (e.g., the expected number of mortalities) the population has experienced up to a specific time.
+**KM Survival Curves:** These plots depict non-parametric estimates of the survival function over time, showing the probability of surviving beyond each time point. When grouping variables are specified, separate curves are plotted per group, allowing visual comparison of survival trajectories. Users can optionally add 95% confidence intervals and zoom the y-axis to the observed data range. 
+
+**Cumulative Hazard Plots:** These plots depict the total accumulated risk (e.g., the expected number of mortalities) the population has experienced up to a specific time. Users can optionally add 95% confidence intervals and zoom the y-axis to the observed data range.
 
 **Forest Plots:** Visual summaries of hazard ratios and 95% confidence intervals for each covariate, with log-scaled axes to reflect the multiplicative nature of hazard ratios.
 
-**Predicted Survival at Covariate Means:** Users have the option to generate survival outputs estimated for a hypothetical individual with mean values on all covariates, providing a useful population-level summary.
+**Predicted Survival at Covariate Means:** Users have the option to generate survival outputs estimated for a hypothetical individual with mean values on all covariates, providing a useful population-level summary. Users can optionally add 95% confidence intervals and zoom the y-axis to the observed data range.
 
 **Schoenfeld Residuals:** Users have the option to generate diagnostic plots are used to assess whether the proportional hazards assumption holds. Random scatter around zero across time indicates the assumption is satisfied; a systematic trend may indicate a violation.
 
-**Mortality plots**: Users have the option to generate diagnostic plots showing monthly mortality across the study period.
+**Mortality plots:** Users have the option to generate diagnostic plots showing monthly mortality across the study period.
+
+**Tracking History:** Users have the option to generate a plot detailing the start and end dates of each individual during the tracking period, with gaps in collaring indicated.
 
 Data subsetting:
 
@@ -58,10 +62,10 @@ The app then summarizes the data into a per-individual table and figure containi
 Finally, the app fits a Cox Proportional Hazards model on the cleaned dataset, generating:
 
 - A table of hazard ratios with 95% confidence intervals and p-values
-- A predicted survival curve at covariate means (with 95% confidence intervals) (optional)
-- A cumulative hazard curve at covariate means (optional)
-- A forest plot of hazard ratios
-- Schoenfeld residual diagnostic plots (optional)
+- A predicted survival curve at covariate means (with 95% confidence intervals) (*optional*)
+- A cumulative hazard curve at covariate means (*optional*)
+- A forest plot of hazard ratios acrpss all covariates
+- Schoenfeld residual diagnostic plots (*optional*)
 
 When stratified group comparisons are enabled, the app additionally produces per-covariate:
 

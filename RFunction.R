@@ -1838,7 +1838,7 @@ rFunction = function(data,
     km_fit <- survfit(km_formula, data = fitting_data)
     
     km_plot <- ggsurvfit(km_fit, linewidth = 0.9) +
-      add_confidence_interval(alpha = 0.12) + 
+      { if (add_cis) add_confidence_interval(alpha = 0.12) } +
       scale_color_manual(values = pal) +
       scale_fill_manual(values  = pal) +
       scale_y_continuous(limits = c(0, 1), labels = percent_format(accuracy = 1)) +
@@ -1853,8 +1853,25 @@ rFunction = function(data,
       theme_classic(base_size = 12) +
       theme(plot.title         = element_text(face = "bold", size = 14),
             plot.subtitle      = element_text(size = 10, color = "grey40"),
-            legend.position    = "top",
+            legend.position    = "bottom",
             panel.grid.major.y = element_line(color = "grey92"))
+    
+    # Zoom y-axis to data range
+    if (zoom_to_plot) {
+      y_min   <- min(km_fit$surv, na.rm = TRUE)
+      y_floor <- floor(y_min * 10) / 10
+      km_plot <- km_plot +
+        coord_cartesian(ylim = c(y_floor, 1)) +
+        annotate("text",
+                 x        = -Inf,
+                 y        = y_floor,
+                 label    = paste0("* y-axis zoomed to [", round(y_floor, 2), ", 1]"),
+                 hjust    = -0.05,
+                 vjust    = -0.5,
+                 size     = 3.2,
+                 color    = "gray50",
+                 fontface = "italic")
+    }
     
     png(appArtifactPath(paste0("km_by_", cov, ".png")),
         width = 8, height = 7, units = "in", res = 300)
@@ -1892,6 +1909,7 @@ rFunction = function(data,
     
     ## Cumulative hazard by group ---
     cumhaz_plot <- ggsurvfit(km_fit, type = "cumhaz", linewidth = 0.9) +
+      { if (add_cis) add_confidence_interval(alpha = 0.12) } +
       scale_color_manual(values = pal) +
       scale_fill_manual(values  = pal) +
       scale_x_continuous(expand = c(0.02, 0),
@@ -1905,7 +1923,24 @@ rFunction = function(data,
       theme_classic(base_size = 12) +
       theme(plot.title      = element_text(face = "bold"),
             plot.subtitle   = element_text(size = 10, color = "grey40"),
-            legend.position = "top")
+            legend.position = "bottom")
+    
+    # Zoom y-axis to data range
+    if (zoom_to_plot) {
+      y_max     <- max(-log(km_fit$surv), na.rm = TRUE)
+      y_ceiling <- ceiling(y_max * 10) / 10
+      cumhaz_plot <- cumhaz_plot +
+        coord_cartesian(ylim = c(0, y_ceiling)) +
+        annotate("text",
+                 x        = -Inf,
+                 y        = y_ceiling,
+                 label    = paste0("* y-axis zoomed to [0, ", round(y_ceiling, 2), "]"),
+                 hjust    = -0.05,
+                 vjust    = 1.5,
+                 size     = 3.2,
+                 color    = "gray50",
+                 fontface = "italic")
+    }
     
     png(appArtifactPath(paste0("cumhaz_by_", cov, ".png")),
         width = 7, height = 5, units = "in", res = 300)
@@ -1923,32 +1958,60 @@ rFunction = function(data,
                   surv_rate = 1 - (n_deaths / n_animals),
                   .groups   = "drop")
       
+      # Dynamic sizing based on number of groups and years
+      n_groups <- length(unique(annual_surv[[cov]]))
+      n_years  <- length(unique(annual_surv$survival_year))
+      plot_width  <- max(8, n_years * n_groups * 0.4)
+      plot_height <- max(6, 5 + ceiling(n_groups / 4) * 0.6)  # extra height for legend rows
+      
       annual_plot <- ggplot(annual_surv, aes(x = factor(survival_year),
-                                             y = surv_rate, fill = .data[[cov]])) +
-        geom_col(position = position_dodge(0.8), width = 0.7, alpha = 0.85) +
-        geom_text(aes(label = paste0("n=", n_animals)),
-                  position = position_dodge(0.8),
-                  vjust = -0.4, size = 3, color = "grey30") +
+                                             y = surv_rate,
+                                             fill = .data[[cov]])) +
+        geom_col(position = position_dodge(0.85), width = 0.75, alpha = 0.88,
+                 color = "white", linewidth = 0.3) +
+        geom_text(aes(label = paste0("n=", n_animals),
+                      y = pmax(surv_rate - 0.04, 0.04)),  # inside bar, near top
+                  position = position_dodge(0.85),
+                  vjust    = 1,
+                  hjust    = 0.5,
+                  size     = 3.0,
+                  color    = "white",
+                  fontface = "bold") +
         scale_fill_manual(values = pal) +
         scale_y_continuous(limits = c(0, 1.05),
-                           labels = percent_format(accuracy = 1)) +
-        labs(title = paste("Annual Survival Rate by", cov),
-             x     = "Survival Year",
-             y     = "Survival Rate",
-             fill  = cov) +
-        theme_classic(base_size = 12) +
-        theme(plot.title      = element_text(face = "bold"),
-              legend.position = "top",
-              axis.text.x     = element_text(angle = 45, hjust = 1))
+                           breaks = seq(0, 1, by = 0.25),
+                           labels = percent_format(accuracy = 1),
+                           expand = c(0, 0)) +
+        labs(title    = paste("Annual Survival Rate by", cov),
+             subtitle = "Bars show naive annual survival; labels show number of tracked individuals",
+             x        = "Survival Year",
+             y        = "Survival Rate",
+             fill     = cov) +
+        theme_classic(base_size = 14) +
+        theme(plot.title         = element_text(face = "bold", size = 16),
+              plot.subtitle      = element_text(size = 12, color = "gray50",
+                                                margin = margin(b = 8)),
+              axis.text          = element_text(color = "black", size = 12),
+              axis.text.x        = element_text(angle = 45, hjust = 1, vjust = 1, size = 12),
+              axis.title         = element_text(size = 13, face = "bold"),
+              panel.grid.major.y = element_line(color = "gray90"),
+              panel.border       = element_rect(color = "black", fill = NA, linewidth = 0.5),
+              legend.position    = "bottom",
+              legend.title       = element_text(face = "bold", size = 12),
+              legend.text        = element_text(size = 11),
+              legend.key.size    = unit(0.6, "cm"),
+              legend.box.spacing = unit(0.4, "cm"),
+              plot.margin        = margin(10, 15, 10, 10)) +
+        guides(fill = guide_legend(nrow           = ceiling(n_groups / 4),
+                                   byrow          = TRUE,
+                                   title.position = "top"))
       
       png(appArtifactPath(paste0("annual_surv_by_", cov, ".png")),
-          width = 8, height = 5, units = "in", res = 300)
+          width  = plot_width,
+          height = plot_height,
+          units  = "in", res = 300)
       print(annual_plot)
       dev.off()
-      
-      write.csv(annual_surv,
-                file      = appArtifactPath(paste0("annual_surv_", cov, ".csv")),
-                row.names = FALSE)
     }
   }
   
@@ -1956,7 +2019,7 @@ rFunction = function(data,
   
   if (length(all_forest_tabs) > 0) {
     
-    escaped_covs <- gsub("([.+*?^${}()|\\[\\]\\\\])", "\\\\\\1", 
+    escaped_covs <- gsub("([.+*?^${}()|\\[\\]\\\\])", "\\\\\\1",
                          names(all_forest_tabs))
     
     combined_forest_tab <- bind_rows(all_forest_tabs) %>%
@@ -1968,40 +2031,64 @@ rFunction = function(data,
         term_clean  = fct_inorder(term_clean)
       )
     
-    combined_forest_plot <- ggplot(combined_forest_tab,
-                                   aes(x = estimate, y = term_clean, color = significant)) +
-      geom_vline(xintercept = 1, linetype = "dashed", color = "grey50") +
-      geom_errorbarh(aes(xmin = conf.low, xmax = conf.high),
-                     height = 0.25, linewidth = 0.8, color = "grey30") +
-      geom_point(size = 3.5) +
-      scale_color_manual(values = c("TRUE"  = "#D62728",
-                                    "FALSE" = "#1F77B4"),
-                         labels = c("TRUE"  = "p < 0.05",
-                                    "FALSE" = "p ≥ 0.05"),
-                         name   = NULL) +
-      scale_x_log10(labels = number_format(accuracy = 0.01)) +
-      facet_wrap(~ facet_label, scales = "free_y", ncol = 1) +
-      labs(title    = "Hazard Ratios — All Covariates",
-           subtitle = ifelse(firth_used,
-                             "Firth's Penalized Cox Model",
-                             "Standard Cox Model"),
-           x        = "Hazard Ratio (log scale)",
-           y        = NULL) +
-      theme_classic(base_size = 12) +
-      theme(plot.title         = element_text(face = "bold", size = 14),
-            plot.subtitle      = element_text(size = 12, color = "gray50"),
-            axis.text          = element_text(color = "black"),
-            axis.title         = element_text(size = 12),
-            panel.grid.major.y = element_line(color = "gray90"),
-            panel.border       = element_rect(color = "black", fill = NA, linewidth = 0.5),
-            legend.position    = "top",
-            strip.text         = element_text(face = "bold", size = 11),
-            strip.background   = element_rect(fill = "grey95", color = NA),
-            plot.margin        = margin(10, 10, 10, 10))
+    # Build one plot per covariate
+    cov_names   <- names(all_forest_tabs)
+    panel_plots <- vector("list", length(cov_names))
+    panel_nrows <- integer(length(cov_names))
     
-    # Dynamic height: ~2 inches per covariate + rows within each
-    n_rows_total <- nrow(combined_forest_tab)
-    plot_height  <- max(4, 1.5 * length(all_forest_tabs) + 0.4 * n_rows_total)
+    for (i in seq_along(cov_names)) {
+      cov_data <- combined_forest_tab %>% filter(covariate == cov_names[i])
+      n_terms  <- nrow(cov_data)
+      panel_nrows[i] <- n_terms
+      
+      # Only show legend on the last panel
+      show_legend <- i == length(cov_names)
+      
+      panel_plots[[i]] <- ggplot(cov_data,
+                                 aes(x = estimate, y = term_clean, color = significant)) +
+        geom_vline(xintercept = 1, linetype = "dashed", color = "grey50") +
+        geom_errorbarh(aes(xmin = conf.low, xmax = conf.high),
+                       height = 0.25, linewidth = 0.8, color = "grey30") +
+        geom_point(size = 3.5) +
+        scale_color_manual(values = c("TRUE"  = "#D62728",
+                                      "FALSE" = "#1F77B4"),
+                           labels = c("TRUE"  = "p < 0.05",
+                                      "FALSE" = "p \u2265 0.05"),
+                           name   = NULL) +
+        scale_x_log10(labels = number_format(accuracy = 0.01)) +
+        labs(title = unique(cov_data$facet_label),
+             x     = if (i == length(cov_names)) "Hazard Ratio (log scale)" else NULL,
+             y     = NULL) +
+        theme_classic(base_size = 12) +
+        theme(plot.title         = element_text(face = "bold", size = 11, hjust = 0),
+              axis.text          = element_text(color = "black"),
+              axis.title.x       = element_text(size = 12),
+              axis.text.x        = if (i == length(cov_names))
+                element_text() else element_blank(),
+              axis.ticks.x       = if (i == length(cov_names))
+                element_line() else element_blank(),
+              panel.grid.major.y = element_line(color = "gray90"),
+              panel.border       = element_rect(color = "black", fill = NA, linewidth = 0.5),
+              strip.background   = element_rect(fill = "grey95", color = NA),
+              legend.position    = if (show_legend) "bottom" else "none",
+              legend.justification = "left",
+              plot.margin        = margin(5, 10, if (i == length(cov_names)) 5 else 2, 10))
+    }
+    
+    # Stack with patchwork, heights proportional to number of terms
+    combined_forest_plot <- wrap_plots(panel_plots, ncol = 1,
+                                       heights = panel_nrows) +
+      plot_annotation(
+        title    = "Hazard Ratios \u2014 All Covariates",
+        subtitle = ifelse(firth_used,
+                          "Firth's Penalized Cox Model",
+                          "Standard Cox Model"),
+        theme    = theme(plot.title    = element_text(face = "bold", size = 14),
+                         plot.subtitle = element_text(size = 12, color = "gray50"))
+      )
+    
+    # Dynamic height: base per panel + per row allowance
+    plot_height <- max(4, length(cov_names) * 1.2 + sum(panel_nrows) * 0.45)
     
     png(appArtifactPath("forest_combined.png"),
         width  = 8,

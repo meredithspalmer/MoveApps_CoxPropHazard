@@ -4,6 +4,10 @@ Github repository:
 
 https://github.com/meredithspalmer/MoveApps_CoxPropHazard
 
+Artefacts guide: 
+
+https://github.com/meredithspalmer/MoveApps_CoxPropHazard/blob/master/docs/CoxPH_Artefacts_Guide.pdfa
+
 ## Description
 
 Perform Cox Proportional Hazards survival analyses and optional stratified group comparisons, with automatic fallback to Firth's penalized regression when separation is detected.
@@ -115,6 +119,10 @@ Note that a larger sample size is required for stratified group comparisons.
 `move2::move2_loc`
 
 ### Artefacts
+
+For detailed descriptions of artefacts produced, please see:
+
+https://github.com/meredithspalmer/MoveApps_CoxPropHazard/blob/master/docs/CoxPH_Artefacts_Guide.pdf
 
 **Tracking history:** Figure (`tracking_history.png`) detailing the start and end dates of each individual during the tracking period (with gaps in collaring noted). *Optional*
 

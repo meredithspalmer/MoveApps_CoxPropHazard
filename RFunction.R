@@ -532,6 +532,8 @@ rFunction = function(data,
   
   ## Calculate survival years (if selected) -----------------------------------
   
+  yearly_survival <- NULL
+  
   if (!is.null(survival_yr_start)) {
     
     # Survival year start 
@@ -807,6 +809,9 @@ rFunction = function(data,
         summary_table <- summary_table %>% filter(.data[[spec$col]] == value)
       }
     } else {
+      if (is.null(yearly_survival)) {          
+        logger.fatal("yearly_survival is NULL despite survival_yr_start being set. This is unexpected.")
+      }
       if (!spec$yearly_ok) {
         logger.fatal("This subset only makes sense when data are processed by survival year. Please enter survival year start date.")
       } else {

@@ -1407,19 +1407,24 @@ rFunction = function(data,
   names(ref_levels) <- covariates
   covariates <- covariates[!is.null(covariates) & !is.na(covariates)]
 
-  # Apply reference levels where specified
-  for (cov in covariates) {
-    ref <- ref_levels[[cov]]
-    if (!is.null(ref) && ref %in% levels(factor(fitting_data[[cov]]))) {
-      fitting_data[[cov]] <- relevel(factor(fitting_data[[cov]]), ref = ref)
-    } else if (!is.null(ref)) {
-      logger.info(paste0("Reference level '", ref, "' not found in covariate '", cov, "' — using default."))
+  if (length(covariates) == 0) {
+    logger.fatal("No valid covariates remain for Cox model (all were NULL or had only one level). Skipping Cox PH analysis.")
+    
+  } else {
+    
+    # Apply reference levels where specified
+    for (cov in covariates) {
+      ref <- ref_levels[[cov]]
+      if (!is.null(ref) && ref %in% levels(factor(fitting_data[[cov]]))) {
+        fitting_data[[cov]] <- relevel(factor(fitting_data[[cov]]), ref = ref)
+      } else if (!is.null(ref)) {
+        logger.info(paste0("Reference level '", ref, "' not found in covariate '", cov, "' — using default."))
+      }
     }
-  }  
     
   # Build formula dynamically
-  cox_formula <- as.formula(paste("Surv(entry_time_days, exit_time_days, mortality_event) ~",
-                                  paste(covariates, collapse = " + ")))
+    cox_formula <- as.formula(paste("Surv(entry_time_days, exit_time_days, mortality_event) ~",
+                                    paste(covariates, collapse = " + ")))
     
   # Fit standard Cox 
   firth_used          <- FALSE
@@ -1481,8 +1486,13 @@ rFunction = function(data,
     
     
     # Plot of predicted survival --- 
+    optional_layers <- list()
+    if (isTRUE(add_cis)) {
+      optional_layers <- c(optional_layers, list(add_confidence_interval()))
+    }
+    
     surv_plot <- ggsurvfit(surv.at.means) +
-      add_confidence_interval() +
+      optional_layers +
       add_risktable(risktable_stats = c("n.risk", "cum.event"),
                     theme = theme_risktable_default(axis.text.y.size = 9)) +
       labs(title    = "Predicted Survival at Covariate Means",
@@ -1583,6 +1593,7 @@ rFunction = function(data,
     }
   }
   
+  } 
   
   ## Stratified Group Comparisons ---------------------------------------------
   

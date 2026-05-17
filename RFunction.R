@@ -1521,7 +1521,7 @@ rFunction = function(data,
     
     ## Plot cumulative hazard curve --- 
     cum_hazard <- ggsurvfit(surv.at.means, type = "cumhaz") +
-      add_confidence_interval() +
+      optional_layers +
       labs(title    = "Cumulative Hazard at Covariate Means",
            subtitle = ifelse(firth_used, "Firth's Penalized Cox Model", "Standard Cox Model"),
            x        = "Days",

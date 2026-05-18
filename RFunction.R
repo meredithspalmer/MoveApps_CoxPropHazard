@@ -319,7 +319,7 @@ rFunction = function(data,
   } 
   
   if (fix_na_end_times == "remove"){
-    n_missing <- sum(is.na(is.na(summary_table$deploy_off_timestamp)))
+    n_missing <- sum(is.na(summary_table$deploy_off_timestamp))
     summary_table <- summary_table %>% filter(!is.na(deploy_off_timestamp))
     
     if (n_missing > 0) {
@@ -875,8 +875,9 @@ rFunction = function(data,
       
       if (!is.null(cox_covariate_1)) {
         n_original    <- nrow(summary_table)
-        summary_table <- summary_table[!is.na(summary_table[[cox_covariate_1]]) & 
-                                         trimws(summary_table[[cox_covariate_1]]) != "", ]
+        summary_table <- summary_table[!is.na(summary_table[[cox_covariate_1]]) &
+                                         (is.numeric(summary_table[[cox_covariate_1]]) | 
+                                          trimws(as.character(summary_table[[cox_covariate_1]])) != ""),]
         
         unique_values <- sort(unique(summary_table[[cox_covariate_1]]))
         n_values      <- length(unique_values)
@@ -906,7 +907,8 @@ rFunction = function(data,
       if (!is.null(cox_covariate_1)) {
         n_original      <- nrow(yearly_survival)
         yearly_survival <- yearly_survival[!is.na(yearly_survival[[cox_covariate_1]]) & 
-                                             trimws(yearly_survival[[cox_covariate_1]]) != "", ]
+                                             (is.numeric(yearly_survival[[cox_covariate_1]]) | 
+                                              trimws(as.character(yearly_survival[[cox_covariate_1]])) != ""), ]
         
         unique_values <- sort(unique(yearly_survival[[cox_covariate_1]]))
         n_values      <- length(unique_values)
@@ -942,8 +944,9 @@ rFunction = function(data,
       if (!is.null(cox_covariate_2)) {
         n_original    <- nrow(summary_table)
         summary_table <- summary_table[!is.na(summary_table[[cox_covariate_2]]) & 
-                                         trimws(summary_table[[cox_covariate_2]]) != "", ]
-        
+                                         (is.numeric(summary_table[[cox_covariate_2]]) | 
+                                            trimws(as.character(summary_table[[cox_covariate_2]])) != ""),]
+    
         unique_values <- sort(unique(summary_table[[cox_covariate_2]]))
         n_values      <- length(unique_values)
         
@@ -972,7 +975,8 @@ rFunction = function(data,
       if (!is.null(cox_covariate_2)) {
         n_original      <- nrow(yearly_survival)
         yearly_survival <- yearly_survival[!is.na(yearly_survival[[cox_covariate_2]]) & 
-                                             trimws(yearly_survival[[cox_covariate_2]]) != "", ]
+                                             (is.numeric(yearly_survival[[cox_covariate_2]]) | 
+                                              trimws(as.character(yearly_survival[[cox_covariate_2]])) != ""), ]
         
         unique_values <- sort(unique(yearly_survival[[cox_covariate_2]]))
         n_values      <- length(unique_values)
@@ -1008,7 +1012,8 @@ rFunction = function(data,
       if (!is.null(cox_covariate_3)) {
         n_original    <- nrow(summary_table)
         summary_table <- summary_table[!is.na(summary_table[[cox_covariate_3]]) & 
-                                         trimws(summary_table[[cox_covariate_3]]) != "", ]
+                                         (is.numeric(summary_table[[cox_covariate_3]]) | 
+                                          trimws(as.character(summary_table[[cox_covariate_3]])) != ""),]
         
         unique_values <- sort(unique(summary_table[[cox_covariate_3]]))
         n_values      <- length(unique_values)
@@ -1038,7 +1043,8 @@ rFunction = function(data,
       if (!is.null(cox_covariate_3)) {
         n_original      <- nrow(yearly_survival)
         yearly_survival <- yearly_survival[!is.na(yearly_survival[[cox_covariate_3]]) & 
-                                             trimws(yearly_survival[[cox_covariate_3]]) != "", ]
+                                             (is.numeric(yearly_survival[[cox_covariate_3]]) | 
+                                              trimws(as.character(yearly_survival[[cox_covariate_3]])) != ""), ]
         
         unique_values <- sort(unique(yearly_survival[[cox_covariate_3]]))
         n_values      <- length(unique_values)
@@ -1386,6 +1392,8 @@ rFunction = function(data,
   
   ## Cox Proportional Hazard Analysis -----------------------------------------
   
+  force_categorical_cols <- c("survival_year")
+  
   # Select fitting data 
   if (is.null(survival_yr_start)) {
     logger.info("Calculating Cox Proportional Hazards using summary table...")
@@ -1404,8 +1412,11 @@ rFunction = function(data,
   # Collect non-NULL covariates
   covariates <- c(cox_covariate_1, cox_covariate_2, cox_covariate_3)
   ref_levels <- list(cox_covariate_1_ref, cox_covariate_2_ref, cox_covariate_3_ref)
+  names(ref_levels) <- c("cox_covariate_1", "cox_covariate_2", "cox_covariate_3")
+  valid_idx  <- !sapply(covariates, is.null) & !is.na(covariates)
+  covariates <- covariates[valid_idx]
+  ref_levels <- ref_levels[valid_idx]
   names(ref_levels) <- covariates
-  covariates <- covariates[!is.null(covariates) & !is.na(covariates)]
 
   if (length(covariates) == 0) {
     logger.fatal("No valid covariates remain for Cox model (all were NULL or had only one level). Skipping Cox PH analysis.")
@@ -1415,6 +1426,12 @@ rFunction = function(data,
     # Apply reference levels where specified
     for (cov in covariates) {
       ref <- ref_levels[[cov]]
+      
+      # Coerce forced-categorical columns to factor before releveling
+      if (cov %in% force_categorical_cols) {
+        fitting_data[[cov]] <- factor(fitting_data[[cov]])
+      }
+      
       if (!is.null(ref) && ref %in% levels(factor(fitting_data[[cov]]))) {
         fitting_data[[cov]] <- relevel(factor(fitting_data[[cov]]), ref = ref)
       } else if (!is.null(ref)) {
@@ -1619,8 +1636,16 @@ rFunction = function(data,
     logger.info(paste("Producing group comparison outputs for:", cov))
     
     # Detect whether covariate is continuous
-    is_continuous <- is.numeric(fitting_data[[cov]]) || 
-      inherits(fitting_data[[cov]], "units")
+    is_continuous <- (is.numeric(fitting_data[[cov]]) || inherits(fitting_data[[cov]], "units")) &&
+      !(cov %in% force_categorical_cols)
+    
+    # Coerce forced-categorical columns to factor
+    if (cov %in% force_categorical_cols) {
+      fitting_data[[cov]] <- factor(fitting_data[[cov]])
+      if (!is.null(ref) && ref %in% levels(fitting_data[[cov]])) {
+        fitting_data[[cov]] <- relevel(fitting_data[[cov]], ref = ref)
+      }
+    }
     
     # Build formula  
     km_formula <- as.formula(paste("Surv(entry_time_days, exit_time_days, mortality_event) ~", cov))
@@ -1873,7 +1898,7 @@ rFunction = function(data,
             panel.grid.major.y = element_line(color = "grey92"))
     
     # Zoom y-axis to data range
-    if (zoom_to_plot) {
+    if (isTRUE(zoom_to_plot)) {
       y_min   <- min(km_fit$surv, na.rm = TRUE)
       y_floor <- floor(y_min * 10) / 10
       km_plot <- km_plot +
@@ -1942,7 +1967,7 @@ rFunction = function(data,
             legend.position = "bottom")
     
     # Zoom y-axis to data range
-    if (zoom_to_plot) {
+    if (isTRUE(zoom_to_plot)) {
       y_max     <- max(-log(km_fit$surv), na.rm = TRUE)
       y_ceiling <- ceiling(y_max * 10) / 10
       cumhaz_plot <- cumhaz_plot +
@@ -1986,7 +2011,7 @@ rFunction = function(data,
         geom_col(position = position_dodge(0.85), width = 0.75, alpha = 0.88,
                  color = "white", linewidth = 0.3) +
         geom_text(aes(label = paste0("n=", n_animals),
-                      y = pmax(surv_rate - 0.04, 0.04)),  # inside bar, near top
+                      y = pmax(surv_rate - 0.04, 0.04)),   
                   position = position_dodge(0.85),
                   vjust    = 1,
                   hjust    = 0.5,

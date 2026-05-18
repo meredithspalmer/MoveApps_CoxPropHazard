@@ -1992,8 +1992,10 @@ rFunction = function(data,
     ## Annual survival rate bar chart (yearly mode only) ---
     if (!is.null(survival_yr_start)) {
       
+      group_vars <- unique(c("survival_year", cov))
+      
       annual_surv <- fitting_data %>%
-        group_by(survival_year, .data[[cov]]) %>%
+        group_by(across(all_of(group_vars))) %>%
         summarise(n_animals = n_distinct(individual_id),
                   n_deaths  = sum(mortality_event, na.rm = TRUE),
                   surv_rate = 1 - (n_deaths / n_animals),

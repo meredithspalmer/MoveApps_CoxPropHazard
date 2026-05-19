@@ -94,7 +94,11 @@ This app allows for staggered entry during the defined study period and for cens
 
 The app will produce a warning and terminate if none of the individuals in the study experienced a mortality event during the study period or data subset.
 
-**Covariates**: The CoxPH model requires at least one covariate to be specified. Covariates must be present as named columns in the data and must contain at least two non-NA levels or values after cleaning. Covariates with only one unique value (or that are entirely NA) will be dropped automatically with a warning. Continuous (numeric) covariates are supported in the main Cox model and will receive a forest plot; group-level outputs such as KM curves are only produced for categorical covariates. These variables are cleaned and standardized for capitalization and white-space errors (e.g., "male" and "Male" will register as the same class) but note that other misspecifications (e.g., "male " vs. "M") will be treated as separate groups. The column name of the group comparison value must be spelled and formatted exactly as found in the MoveBank dataset. DO NOT ADD QUOTATION MARKS around the covariate name or reference level name. 
+**Covariates**: The CoxPH model requires at least one covariate to be specified. Covariates must be present as named columns in the data and must contain at least two non-NA levels or values after cleaning. Covariates with only one unique value (or that are entirely NA) will be dropped automatically with a warning. Continuous (numeric) covariates are supported in the main Cox model and will receive a forest plot; group-level outputs such as KM curves are only produced for categorical covariates. 
+
+These variables are cleaned and standardized for capitalization and white-space errors (e.g., "male" and "Male" will register as the same class) but note that other misspecifications (e.g., "male " vs. "M") will be treated as separate groups. The column name of the group comparison value must be spelled and formatted exactly as found in the MoveBank dataset. 
+
+DO NOT ADD QUOTATION MARKS around the covariate name or reference level name. 
 
 **Sample size**: The required sample size for a CoxPH analysis depends primarily on the total number of deaths, rather than the total number of individuals. In general, the lower the event (death) rate, the higher the number of required individuals. A commonly used rule of thumb is at least 10 events per covariate.
 
@@ -102,7 +106,9 @@ This app does *not* perform a power analysis prior to performing the survival an
 
 Note that a larger sample size is required for stratified group comparisons.
 
-**Subsetting data**: Users can select what subset of individuals to include in the study (only females, only individuals alive within a specific survival year, individuals wearing certain collar types, etc.). Data can be subset based on up to two attributes. DO NOT ADD QUOTATION MARKS around the data subsetting column name or condition. 
+**Subsetting data**: Users can select what subset of individuals to include in the study (only females, only individuals alive within a specific survival year, individuals wearing certain collar types, etc.). Data can be subset based on up to two attributes. 
+
+DO NOT ADD QUOTATION MARKS around the data subsetting column name or condition. 
 
 **Survival years**: Users can define a "survival year" for analyses, different from a calendar year in that this period extends from when an animal is typically born to the end of their first year.
 

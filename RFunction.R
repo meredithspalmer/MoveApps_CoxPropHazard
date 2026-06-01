@@ -1112,38 +1112,42 @@ rFunction = function(data,
       
       # Build the plot  
       tracking_history <- ggplot(deployment_summary) +
-        geom_segment(aes(x = plot_start, xend = plot_end,
+      geom_segment(aes(x = plot_start, xend = plot_end, 
                          y = individual_label, yend = individual_label),
                      linewidth = 3.2, color = "grey") +
-        geom_point(aes(x = plot_start, y = individual_label),
-                   color = "#1F77B4", size = 3.5) +
-        geom_point(aes(x = plot_end, y = individual_label),
-                   color = "#9467BD", size = 3.5) +
-        geom_segment(data = deployment_summary_with_gaps,
-                     aes(x = gap_start + (gap_end - gap_start)/2,
-                         xend = gap_start + (gap_end - gap_start)/2,
-                         y = as.numeric(individual_label),
-                         yend = as.numeric(individual_label) + 0.45),
-                     color = "grey50", linewidth = 1.2,
-                     arrow = arrow(length = unit(0.18, "cm"), type = "closed")) +
-        labs(title = "Individual Collared Periods",
-             subtitle = sprintf("%d unique individuals • %d visible deployments • %d locations",
-                                n_distinct(deployment_summary$individual_id),
-                                nrow(deployment_summary),
-                                n_locs_total),
-             x = "Time",
-             y = "Individual") +
-        theme_minimal(base_size = 12) +
-        theme(axis.text.y = element_text(size = 8, face = "plain"),
-              panel.grid.major.y = element_blank(),
-              panel.grid.minor = element_blank(),
-              plot.title = element_text(face = "bold", size = 14),
-              plot.subtitle = element_text(size = 11, color = "grey50", margin = margin(b = 10)),
-              axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
-              axis.title = element_text(size = 12)) +
-        scale_x_datetime(date_breaks = "1 year",
-                         date_labels = "%Y",
-                         expand = expansion(mult = c(0.01, 0.03)))
+      geom_point(aes(x = plot_start, y = individual_label),
+                 color = "#1F77B4", size = 3.5) +
+      geom_point(aes(x = plot_end, y = individual_label,
+                 color = factor(mortality_event)), size = 3.5) +
+      scale_color_manual(
+        values = c("0" = "#9467BD", "1" = "red"),
+        labels = c("0" = "Censored", "1" = "Mortality"),
+        name   = "End event") +
+  geom_segment(data = deployment_summary_with_gaps,
+               aes(x = gap_start + (gap_end - gap_start)/2,
+                   xend = gap_start + (gap_end - gap_start)/2,
+                   y = as.numeric(individual_label),
+                   yend = as.numeric(individual_label) + 0.45),
+               color = "grey50", linewidth = 1.2,
+               arrow = arrow(length = unit(0.18, "cm"), type = "closed")) +
+  labs(title = "Individual Collared Periods",
+       subtitle = sprintf("%d unique individuals • %d visible deployments • %d locations",
+                          n_distinct(deployment_summary$individual_id),
+                          nrow(deployment_summary),
+                          n_locs_total),
+       x = "Time",
+       y = "Individual") +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.y = element_text(size = 8, face = "plain"),
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.title = element_text(face = "bold", size = 14),
+        plot.subtitle = element_text(size = 11, color = "grey50", margin = margin(b = 10)),
+        axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        axis.title = element_text(size = 12)) +
+  scale_x_datetime(date_breaks = "1 year",
+                   date_labels = "%Y",
+                   expand = expansion(mult = c(0.01, 0.03)))
       
       # Dynamic dimensions based on data
       n_individuals <- n_distinct(deployment_summary$individual_id)
@@ -1170,11 +1174,16 @@ rFunction = function(data,
     if (!is.null(survival_yr_start)) {
       logger.info("Plotting tracking history using yearly survival")
       
+      mortality_status <- yearly_survival |>
+        group_by(individual_id) |>
+        summarise(mortality_event = max(mortality_event, na.rm = TRUE), .groups = "drop")
+      
       deployment_summary <- yearly_survival |>
         distinct(individual_id,
                  individual_local_identifier,
                  deploy_on_timestamp,
                  deploy_off_timestamp) |>
+        left_join(mortality_status, by = "individual_id") |>   # <-- join here
         mutate(deploy_on  = as.POSIXct(deploy_on_timestamp),
                deploy_off = as.POSIXct(deploy_off_timestamp),
                duration_days = round(as.numeric(difftime(deploy_off, deploy_on, units = "days")), 1)) |>
@@ -1203,8 +1212,13 @@ rFunction = function(data,
                      linewidth = 3.2, color = "grey") +
         geom_point(aes(x = plot_start, y = individual_label),
                    color = "#1F77B4", size = 3.5) +
-        geom_point(aes(x = plot_end, y = individual_label),
-                   color = "#9467BD", size = 3.5) +
+        geom_point(aes(x = plot_end, y = individual_label,
+                       color = factor(mortality_event)),
+                   size = 3.5) +
+        scale_color_manual(
+          values = c("0" = "#9467BD", "1" = "red"),
+          labels = c("0" = "Censored", "1" = "Mortality"),
+          name   = "End event") +
         geom_segment(data = deployment_summary |>
                        group_by(individual_label) |>
                        arrange(plot_start) |>

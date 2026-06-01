@@ -1292,7 +1292,7 @@ rFunction = function(data,
                deploy_off  = as.Date(deploy_off_timestamp),
                death_date  = coalesce(mort_date, deploy_off),
                death_year  = year(death_date),
-               death_month = month(death_date, label = TRUE, abbr = TRUE),
+               death_month = lubridate::month(death_date, label = TRUE, abbr = TRUE),
                death_month = factor(death_month, levels = month.abb, ordered = TRUE)) |>
         dplyr::select(death_year, death_month)
       
@@ -1353,7 +1353,7 @@ rFunction = function(data,
                deploy_off  = as.Date(deploy_off_timestamp),
                death_date  = coalesce(mort_date, deploy_off),
                death_year  = year(death_date),
-               death_month = month(death_date, label = TRUE, abbr = TRUE),
+               death_month = lubridate::month(death_date, label = TRUE, abbr = TRUE),
                death_month = factor(death_month, levels = month.abb, ordered = TRUE)) |>
         dplyr::select(death_year, death_month)
       

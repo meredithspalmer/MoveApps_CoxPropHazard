@@ -136,13 +136,13 @@ https://github.com/meredithspalmer/MoveApps_CoxPropHazard/blob/master/docs/CoxPH
 
 **Survival at means:** Table (`surv_at_means.csv`) and plot (`surv_at_means_plot.png`) of the predicted survival function for a hypothetical individual with mean covariate values, with 95% confidence intervals. *Optional* 
 
-*Cumulative hazard at means:* Plot (`cum_hazard_at_means_plot.png`) depicting total accumulated risk over time for a hypothetical individual at covariate means. *Optional* 
+**Cumulative hazard at means:** Plot (`cum_hazard_at_means_plot.png`) depicting total accumulated risk over time for a hypothetical individual at covariate means. *Optional* 
 
-*Schoenfeld residuals:* Plot (`schoenfeld_residuals.png`) for assessing the proportional hazards assumption. One panel is generated per covariate. A note is appended when Firth's model was used, as residuals are approximate in that case. *Optional* 
+**Schoenfeld residuals:** Plot (`schoenfeld_residuals.png`) for assessing the proportional hazards assumption. One panel is generated per covariate. A note is appended when Firth's model was used, as residuals are approximate in that case. *Optional* 
 
 The following artefacts are produced **per grouping covariate** (where `<cov>` is the covariate name):
 
-*Model test statistics:* Table (`model_tests_<cov>.csv`) with likelihood ratio, Wald, and score test chi-squared statistics, degrees of freedom, and p-values.
+**Model test statistics:** Table (`model_tests_<cov>.csv`) with likelihood ratio, Wald, and score test chi-squared statistics, degrees of freedom, and p-values.
 
 **Stratified Cox hazard ratios:** Table (`cox_hr_<cov>.csv`) of hazard ratios, 95% confidence intervals, and p-values from a model for the selected covariate. Indicates whether standard Cox or Firth's model was used.
 

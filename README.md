@@ -184,7 +184,9 @@ The following artefacts are produced **per grouping covariate** (where `<cov>` i
 
 ### Most common errors
 
-Please document and send errors to [mspalmer.zool@gmail.com](mailto:mspalmer.zool@gmail.com).
+If you receive the error `number of rows of matrices must match (see arg 2)` during Cox model fitting, this is caused by one or more covariate levels having too few observations for the model to fit correctly. Before running the model, check the distribution of observations across covariate levels and ensure that each level has sufficient sample size. Levels with only 1–2 individuals, or with no mortality events, should be merged with a related category or removed. 
+
+Please document and send additional errors to [mspalmer.zool@gmail.com](mailto:mspalmer.zool@gmail.com).
 
 ### Null or error handling
 
